@@ -336,6 +336,30 @@ def blender_entrypoint() -> None:
 
     # Export GLTF/GLB
     print(f"\nExporting to: {output_path} ({export_format})")
+
+    # ============================================================================
+    # CRITICAL: Enable GLTF_EMBEDDED experimental feature (Blender 4.4.0+)
+    # ============================================================================
+    # In Blender 4.4.0+, GLTF_EMBEDDED became an experimental feature that must
+    # be explicitly enabled via preferences. The UI checkbox does NOT affect this
+    # when running Blender via --background mode, so we MUST enable it
+    # programmatically here.
+    #
+    # DO NOT REMOVE THIS CODE! Without it, GLTF_EMBEDDED exports will fail with:
+    #   TypeError: enum "GLTF_EMBEDDED" not found in ('GLB', 'GLTF_SEPARATE')
+    #
+    # Note: Older Blender versions (< 4.4.0) may not have the 'allow_embedded_format'
+    # preference. The hasattr() check ensures backward compatibility.
+    # ============================================================================
+    if export_format == 'GLTF_EMBEDDED':
+        try:
+            addon = bpy.context.preferences.addons.get('io_scene_gltf2')
+            if addon and hasattr(addon.preferences, 'allow_embedded_format'):
+                addon.preferences.allow_embedded_format = True
+                print("Enabled GLTF_EMBEDDED experimental feature (allow_embedded_format)")
+        except Exception as e:
+            print(f"Warning: Could not enable GLTF_EMBEDDED: {e}")
+
     bpy.ops.export_scene.gltf(
         filepath=output_path,
         export_format=export_format,

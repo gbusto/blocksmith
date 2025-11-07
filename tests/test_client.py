@@ -30,60 +30,66 @@ class TestBlocksmithClient:
         bs = Blocksmith(default_model="gemini/gemini-2.0-flash")
         assert bs.default_model == "gemini/gemini-2.0-flash"
 
-    @patch('blocksmith.generator.engine.dspy.LM')
-    def test_generate_returns_result(self, mock_lm):
+    @patch('blocksmith.llm.client.litellm.completion')
+    def test_generate_returns_result(self, mock_completion):
         """Test that generate() returns a GenerationResult"""
-        # Mock the LLM response
-        mock_generator = Mock()
-        mock_generator.return_value = Mock(code=MOCK_DSL_OUTPUT)
+        # Mock the LiteLLM response
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
+        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        mock_completion.return_value = mock_response
 
-        with patch('blocksmith.generator.engine.dspy.ChainOfThought', return_value=mock_generator):
-            bs = Blocksmith()
-            result = bs.generate("a cube")
+        bs = Blocksmith()
+        result = bs.generate("a cube")
 
-            assert isinstance(result, GenerationResult)
-            assert result.dsl == MOCK_DSL_OUTPUT
+        assert isinstance(result, GenerationResult)
+        # Compare stripped versions (engine strips the code output)
+        assert result.dsl.strip() == MOCK_DSL_OUTPUT.strip()
 
-    @patch('blocksmith.generator.engine.dspy.LM')
-    def test_result_has_json_property(self, mock_lm):
+    @patch('blocksmith.llm.client.litellm.completion')
+    def test_result_has_json_property(self, mock_completion):
         """Test that GenerationResult converts DSL to JSON"""
-        mock_generator = Mock()
-        mock_generator.return_value = Mock(code=MOCK_DSL_OUTPUT)
+        # Mock the LiteLLM response
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
+        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        mock_completion.return_value = mock_response
 
-        with patch('blocksmith.generator.engine.dspy.ChainOfThought', return_value=mock_generator):
-            bs = Blocksmith()
-            result = bs.generate("a cube")
+        bs = Blocksmith()
+        result = bs.generate("a cube")
 
-            # Access json property (should trigger conversion)
-            json_data = result.json
-            assert "entities" in json_data
-            assert len(json_data["entities"]) == 1
+        # Access json property (should trigger conversion)
+        json_data = result.json
+        assert "entities" in json_data
+        assert len(json_data["entities"]) == 1
 
-    @patch('blocksmith.generator.engine.dspy.LM')
-    def test_result_saves_to_file(self, mock_lm):
+    @patch('blocksmith.llm.client.litellm.completion')
+    def test_result_saves_to_file(self, mock_completion):
         """Test that GenerationResult.save() creates files"""
-        mock_generator = Mock()
-        mock_generator.return_value = Mock(code=MOCK_DSL_OUTPUT)
+        # Mock the LiteLLM response
+        mock_response = Mock()
+        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
+        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+        mock_completion.return_value = mock_response
 
-        with patch('blocksmith.generator.engine.dspy.ChainOfThought', return_value=mock_generator):
-            bs = Blocksmith()
-            result = bs.generate("a cube")
+        bs = Blocksmith()
+        result = bs.generate("a cube")
 
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # Test Python DSL save
-                py_path = os.path.join(tmpdir, "cube.py")
-                result.save(py_path)
-                assert os.path.exists(py_path)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Test Python DSL save
+            py_path = os.path.join(tmpdir, "cube.py")
+            result.save(py_path)
+            assert os.path.exists(py_path)
 
-                # Test JSON save
-                json_path = os.path.join(tmpdir, "cube.json")
-                result.save(json_path)
-                assert os.path.exists(json_path)
+            # Test JSON save
+            json_path = os.path.join(tmpdir, "cube.json")
+            result.save(json_path)
+            assert os.path.exists(json_path)
 
-                # Test BBModel save
-                bbmodel_path = os.path.join(tmpdir, "cube.bbmodel")
-                result.save(bbmodel_path)
-                assert os.path.exists(bbmodel_path)
+            # Test BBModel save
+            bbmodel_path = os.path.join(tmpdir, "cube.bbmodel")
+            result.save(bbmodel_path)
+            assert os.path.exists(bbmodel_path)
 
     def test_missing_api_key_gives_clear_error(self):
         """Test that missing API key gives a clear error message"""
@@ -95,12 +101,12 @@ class TestBlocksmithClient:
                 del os.environ[key]
 
         try:
-            # DSPy should raise an error when no API key is found
+            # LiteLLM should raise an error when no API key is found
             with pytest.raises(Exception) as exc_info:
                 bs = Blocksmith()
                 bs.generate("a cube")
 
-            # Error should mention API key (DSPy's error message)
+            # Error should mention API key
             error_msg = str(exc_info.value).lower()
             assert "api" in error_msg or "key" in error_msg or "gemini" in error_msg
 

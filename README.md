@@ -1,15 +1,15 @@
 # BlockSmith
 
-[![Tests](https://github.com/gbusto/blocksmithai/actions/workflows/test-blocksmith-oss.yml/badge.svg)](https://github.com/gbusto/blocksmithai/actions/workflows/test-blocksmith-oss.yml)
+[![Tests](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml/badge.svg)](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml)
 
-> Generate voxel/block-based 3D models from text prompts using AI
+**Generate block-based 3D models from text prompts using AI **
 
-BlockSmith is a minimal, powerful Python library for generating block-style 3D models that are perfect for games, voxel art, and procedural content. It uses LLMs to generate clean Python code that creates optimized 3D models.
+BlockSmith is a powerful Python library for generating block-style 3D models that are perfect for games, art, and procedural content.
 
 ## Features
 
 - 🎨 **Text-to-3D**: Generate block models from simple text descriptions
-- 🧱 **True Voxel Geometry**: Perfect cube geometry, not just "blocky-looking" models
+- 🧱 **True Block Geometry**: Perfect cube geometry, not just "blocky-looking" models
 - 🚀 **Lightweight**: Minimal dependencies, optimized for performance
 - 🔄 **Multiple Formats**: Export to GLB, GLTF, BBModel (Blockbench), JSON, or Python DSL
 - 🤖 **Agent-Friendly**: Clean API perfect for AI coding assistants
@@ -17,24 +17,35 @@ BlockSmith is a minimal, powerful Python library for generating block-style 3D m
 
 ## Installation
 
-### Complete Setup From Scratch
+> **Note:** This is an alpha release (v0.0.1). Not yet published to PyPI.
 
 **Requirements:** Python 3.12+
 
-#### 1. Install Python Package
+### 1. Clone and Install
 
 ```bash
-pip install blocksmith
+# Clone the repository
+git clone https://github.com/gbusto/blocksmith.git
+cd blocksmith
+
+# Create virtual environment
+python3.12 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in editable mode
+pip install -e .
 ```
 
-#### 2. Set Up API Key
+### 2. Set Up API Key
 
-BlockSmith uses **Gemini 2.5 Pro** by default (best quality for voxel models).
+BlockSmith uses **Gemini 2.5 Pro** by default (best quality for block models).
 
 **Get a free API key:**
 1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
-2. Click "Get API Key"
+2. Click "Create API Key" in the top left and follow the instructions
 3. Copy your key
+
+If you need help with this, let me know. OR, just use OpenAI, or even a free and local model if you want.
 
 **Set the environment variable:**
 
@@ -57,11 +68,13 @@ set GEMINI_API_KEY=your-key-here
 echo $GEMINI_API_KEY  # Should print your key
 ```
 
-#### 3. Install Blender (Optional)
+### 3. Install Blender (Optional)
 
 **Skip this if you only need BBModel, JSON, or Python DSL formats!**
 
-BlockSmith uses Blender's GLTF exporter for GLB/GLTF output. Install if you need 3D game-ready formats:
+BlockSmith uses Blender's GLTF exporter for GLB/GLTF output. Install if you need 3D game-ready formats.
+
+I recommend installing it straight from their site, and noting it's location on disk. OR, use one of the methods below to install it:
 
 **macOS:**
 ```bash
@@ -142,55 +155,62 @@ BlockSmith defaults to **Gemini 2.5 Pro** (best quality) but supports other mode
 
 ```python
 # Use Gemini Flash (faster, cheaper)
-bs = Blocksmith(default_model="gemini/gemini-2.0-flash")
+bs = Blocksmith(default_model="gemini/gemini-2.5-flash")
+
+# Use Gemini Flash (fastest, cheapest)
+bs = Blocksmith(default_model="gemini/gemini-2.5-lite")
 
 # Use OpenAI (requires OPENAI_API_KEY)
-bs = Blocksmith(default_model="gpt-4o")
+bs = Blocksmith(default_model="gpt-5")
 
 # Or override per-generation
-result = bs.generate("a tree", model="gemini/gemini-2.0-flash")
+result = bs.generate("a tree", model="gemini/gemini-2.5-flash")
 ```
 
 **Supported Providers:**
-- **Gemini** (recommended): `gemini/gemini-2.5-pro`, `gemini/gemini-2.0-flash`
-- **OpenAI**: `gpt-4o`, `gpt-4o-mini`
+- **Gemini** (recommended): `gemini/gemini-2.5-pro`, `gemini/gemini-2.5-flash`
+- **OpenAI**: `gpt-5`
 - Any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers)
 
 ## Examples
 
-### Simple Shapes
+> **Note:** Texture generation is not yet implemented (coming in v0.2). Models are currently monochrome geometry.
+
+### Start Simple
 
 ```python
 bs = Blocksmith()
 
-bs.generate("a red cube").save("cube.glb")
-bs.generate("a blue sphere made of blocks").save("sphere.glb")
-bs.generate("a green pyramid").save("pyramid.glb")
+# Basic shapes
+bs.generate("a simple cube").save("cube.glb")
+bs.generate("a pyramid").save("pyramid.glb")
+bs.generate("a sphere made of blocks").save("sphere.glb")
+```
+
+### Simple Objects
+
+```python
+# Tools and items
+bs.generate("a hammer").save("hammer.glb")
+bs.generate("a torch").save("torch.glb")
+bs.generate("a tree").save("tree.glb")
+bs.generate("a chest").save("chest.glb")
 ```
 
 ### Characters
 
 ```python
-bs.generate("a blocky robot character").save("robot.glb")
-bs.generate("a minecraft-style zombie").save("zombie.glb")
-bs.generate("a voxel knight with sword and shield").save("knight.glb")
+# Keep it simple for best results
+bs.generate("a minecraft-style person").save("person.glb")
+bs.generate("a simple blocky robot").save("robot.glb")
 ```
 
-### Objects & Buildings
+### Buildings
 
 ```python
-bs.generate("a medieval castle with towers").save("castle.glb")
-bs.generate("a small village house").save("house.glb")
-bs.generate("a futuristic spaceship").save("spaceship.glb")
-bs.generate("a wooden chest").save("chest.glb")
-```
-
-### Vehicles
-
-```python
-bs.generate("a blocky race car").save("car.glb")
-bs.generate("a tank with turret").save("tank.glb")
-bs.generate("a helicopter").save("helicopter.glb")
+# Simple structures work better
+bs.generate("a small house").save("house.glb")
+bs.generate("a tower").save("tower.glb")
 ```
 
 ## Troubleshooting
@@ -232,7 +252,7 @@ bs.generate("a helicopter").save("helicopter.glb")
 **Solutions:**
 1. **Try a more specific prompt:** Instead of "a car", try "a simple blocky race car with wheels"
 2. **Regenerate:** LLMs are non-deterministic, try generating again
-3. **Use Gemini 2.5 Pro:** It's the best model for voxel geometry
+3. **Use Gemini 2.5 Pro:** It's the best model for block geometry
    ```python
    bs = Blocksmith(default_model="gemini/gemini-2.5-pro")
    ```
@@ -244,11 +264,11 @@ bs.generate("a helicopter").save("helicopter.glb")
 **Solution:**
 1. Make sure you installed the package:
    ```bash
-   pip install blocksmith
+   pip install -e .
    ```
 2. Check you're in the right Python environment:
    ```bash
-   which python  # Should point to your venv
+   which python  # Should point to your .venv
    pip list | grep blocksmith  # Should show blocksmith
    ```
 
@@ -295,9 +315,10 @@ Result object with lazy format conversions.
 BlockSmith uses a central JSON schema (BlockJSON) that makes it easy to convert between formats:
 
 ```
-Python DSL ←→ BlockJSON JSON ←→ GLTF/GLB
+Python DSL ←→ BlockJSON ←→ GLTF/GLB
                  ↕
            Other formats
+      (bedrock, bbmodel, etc)
 ```
 
 This design allows for:
@@ -309,7 +330,7 @@ This design allows for:
 
 This is an early release focused on model generation. Current limitations:
 
-- ⚠️ **Requires Blender** for GLB/GLTF export only (BBModel, JSON, and Python DSL work without it)
+- ⚠️ **Requires Blender** for GLB/GLTF export only
 - ❌ No texture generation yet (coming in v0.2)
 - ❌ No animation support yet (coming in v0.3)
 - ✅ Geometry generation works great!
@@ -321,8 +342,10 @@ This is an early release focused on model generation. Current limitations:
 - [ ] CLI tool (`blocksmith generate "a castle" -o castle.glb`)
 - [ ] Blockbench plugin
 - [ ] Web UI
-- [ ] More LLM providers
-- [ ] Fine-tuned models
+
+## Contact
+
+Feel free to email me at blocksmithai.app @ gmail[.]com, or [reach out on X](https://x.com/gabebusto)
 
 ## Contributing
 
@@ -334,9 +357,9 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ## Links
 
-- [GitHub](https://github.com/gbusto/blocksmithai)
-- [Documentation](https://github.com/gbusto/blocksmithai#readme)
-- [Issues](https://github.com/gbusto/blocksmithai/issues)
+- [GitHub](https://github.com/gbusto/blocksmith)
+- [Documentation](https://github.com/gbusto/blocksmith#readme)
+- [Issues](https://github.com/gbusto/blocksmith/issues)
 
 ---
 

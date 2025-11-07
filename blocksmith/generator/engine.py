@@ -1,25 +1,17 @@
 """
 Core model generation engine
 
-Simplified generator that uses DSPy to generate Python DSL code for block models.
+Simplified generator that uses LiteLLM to generate Python DSL code for block models.
 This is a streamlined version without expert routing - just clean, simple generation.
 """
 
-import dspy
 import logging
+import re
 from typing import Optional
 from blocksmith.generator.prompts import SYSTEM_PROMPT
+from blocksmith.llm import LLMClient, LLMResponse
 
 logger = logging.getLogger(__name__)
-
-# Disable DSPy disk cache for simplicity
-dspy.configure_cache(enable_disk_cache=False)
-
-
-class PythonCodeGenerator(dspy.Signature):
-    """Generate Python code for 3D block model creation"""
-    user_prompt: str = dspy.InputField(desc="User's prompt describing the model to create")
-    code: str = dspy.OutputField(desc="Clean Python code without markdown formatting or extra text")
 
 
 class ModelGenerator:
@@ -40,18 +32,38 @@ class ModelGenerator:
         """
         self.model_name = model
 
-        # Initialize DSPy LM (reads API keys from environment automatically)
-        self.lm = dspy.LM(
+        # Initialize LLM client
+        self.client = LLMClient(
             model=model,
-            cache=False,
             temperature=0.7,
             max_tokens=25000,
         )
 
-        # Create the generator
-        with dspy.context(lm=self.lm):
-            self.generator = dspy.ChainOfThought(PythonCodeGenerator)
-            logger.info(f"Generator initialized with model: {model}")
+        logger.info(f"Generator initialized with model: {model}")
+
+    def _extract_code(self, response_text: str) -> str:
+        """
+        Extract Python code from LLM response.
+
+        Handles responses that may be wrapped in markdown code blocks
+        or contain extra text/explanations.
+
+        Args:
+            response_text: Raw text from LLM
+
+        Returns:
+            Extracted Python code
+        """
+        # Check for markdown code blocks
+        code_block_pattern = r"```(?:python)?\n(.*?)```"
+        matches = re.findall(code_block_pattern, response_text, re.DOTALL)
+
+        if matches:
+            # Return the first code block found
+            return matches[0].strip()
+
+        # If no code blocks, assume entire response is code
+        return response_text.strip()
 
     def generate(self, prompt: str, model: Optional[str] = None) -> str:
         """
@@ -66,42 +78,64 @@ class ModelGenerator:
 
         Examples:
             >>> generator = ModelGenerator()
-            >>> code = generator.generate("a red cube")
+            >>> code = generator.generate("a cube")
             >>> print(code)
         """
         logger.info(f"Generating model for prompt: {prompt[:100]}...")
 
-        # Combine system prompt with user request
-        full_prompt = f"""{SYSTEM_PROMPT}
-
-# User Request
+        # Build messages for LLM
+        messages = [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": f"""# User Request
 {prompt}
 
 # Instructions
 Generate clean Python code that creates the requested model using the helpers provided above.
-Return ONLY the Python code without any markdown formatting, explanations, or extra text.
-"""
+Return ONLY the Python code without any markdown formatting, explanations, or extra text."""
+            }
+        ]
 
-        # Use different model if specified
+        # Use different client if model override specified
         if model:
-            temp_lm = dspy.LM(
+            temp_client = LLMClient(
                 model=model,
-                cache=False,
                 temperature=0.7,
                 max_tokens=25000,
             )
-            with dspy.context(lm=temp_lm):
-                temp_generator = dspy.ChainOfThought(PythonCodeGenerator)
-                result = temp_generator(user_prompt=full_prompt)
+            response = temp_client.complete(messages)
         else:
-            with dspy.context(lm=self.lm):
-                result = self.generator(user_prompt=full_prompt)
+            response = self.client.complete(messages)
 
-        python_code = result.code
+        # Extract Python code from response
+        python_code = self._extract_code(response.content)
 
         # Basic validation
         if not python_code or len(python_code.strip()) < 20:
             raise ValueError("Generated code is too short or empty")
 
-        logger.info(f"Successfully generated {len(python_code)} characters of Python code")
+        # Log token usage and cost
+        logger.info(
+            f"Successfully generated {len(python_code)} characters of Python code. "
+            f"Tokens: {response.tokens.total_tokens}, "
+            f"Cost: ${response.cost:.4f}" if response.cost else f"Tokens: {response.tokens.total_tokens}"
+        )
+
         return python_code
+
+    def get_stats(self):
+        """
+        Get session statistics (total tokens, cost, call count).
+
+        Returns:
+            Dict with session statistics
+        """
+        return self.client.get_stats()
+
+    def reset_stats(self):
+        """Reset session statistics"""
+        self.client.reset_stats()

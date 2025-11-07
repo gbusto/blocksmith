@@ -26,8 +26,6 @@ classifiers = [
 
 dependencies = [
     "pydantic==2.11.5",
-    "dspy==2.6.27",
-    "dspy-ai==2.6.27",
     "trimesh==4.6.11",
     "pygltflib==1.16.4",
     "numpy==2.2.6",
@@ -42,10 +40,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/gbusto/blocksmithai"
-Documentation = "https://github.com/gbusto/blocksmithai#readme"
-Repository = "https://github.com/gbusto/blocksmithai"
-Issues = "https://github.com/gbusto/blocksmithai/issues"
+Homepage = "https://github.com/gbusto/blocksmith"
+Documentation = "https://github.com/gbusto/blocksmith#readme"
+Repository = "https://github.com/gbusto/blocksmith"
+Issues = "https://github.com/gbusto/blocksmith/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
