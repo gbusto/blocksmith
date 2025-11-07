@@ -83,7 +83,7 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        num_retries: int = 3,
+        num_retries: int = 0,
         **override_kwargs
     ) -> LLMResponse:
         """
@@ -94,7 +94,7 @@ class LLMClient:
                       Example: [{"role": "user", "content": "Hello"}]
             temperature: Override default temperature
             max_tokens: Override default max_tokens
-            num_retries: Number of retries on transient errors (default: 3)
+            num_retries: Number of retries on transient errors (default: 0 - fail fast)
             **override_kwargs: Override any litellm parameters
 
         Returns:
@@ -162,21 +162,49 @@ class LLMClient:
                 raw_response=response
             )
 
+        except litellm.exceptions.AuthenticationError as e:
+            # 401 - Invalid API key
+            logger.error(f"Authentication error: {e}")
+            raise LLMAPIError(
+                "Invalid API key - please check your GEMINI_API_KEY or OPENAI_API_KEY "
+                "environment variable."
+            ) from e
+
+        except litellm.exceptions.PermissionDeniedError as e:
+            # 403 - Permission denied
+            logger.error(f"Permission denied: {e}")
+            raise LLMAPIError(
+                "Permission denied - please check your API key and permissions with your AI provider."
+            ) from e
+
+        except litellm.exceptions.RateLimitError as e:
+            # 429 - Rate limit
+            logger.error(f"Rate limit exceeded: {e}")
+            raise LLMAPIError(
+                "Rate limit exceeded - you'll need to wait before trying again. "
+                "Please review your plan with your AI provider."
+            ) from e
+
         except litellm.exceptions.ServiceUnavailableError as e:
+            # 503 - Service unavailable
             logger.error(f"Service unavailable (503): {e}")
-            raise LLMServiceError(f"Provider overloaded: {e}") from e
+            raise LLMServiceError(
+                "The AI service is temporarily unavailable. Please try again in a moment."
+            ) from e
 
         except litellm.exceptions.Timeout as e:
             logger.error(f"Request timeout: {e}")
-            raise LLMTimeoutError(f"Request timed out: {e}") from e
-
-        except litellm.exceptions.RateLimitError as e:
-            logger.error(f"Rate limit exceeded: {e}")
-            raise LLMAPIError(f"Rate limit: {e}") from e
+            raise LLMTimeoutError(
+                "Request timed out - the AI service took too long to respond. Please try again."
+            ) from e
 
         except Exception as e:
-            logger.error(f"LLM error: {e}")
-            raise LLMAPIError(f"LLM call failed: {e}") from e
+            # Catch-all for unexpected errors
+            logger.error(f"Unexpected LLM error: {e}")
+            raise LLMAPIError(
+                f"AI generation failed: {str(e)}\n"
+                "Please check your network connection and API key."
+            ) from e
 
     def get_stats(self) -> Dict[str, Any]:
         """
