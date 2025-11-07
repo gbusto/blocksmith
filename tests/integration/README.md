@@ -16,6 +16,9 @@
 ## Running Integration Tests
 
 ```bash
+# Source your API key first
+source .env
+
 # Run all integration tests
 pytest tests/integration/ -v -s
 

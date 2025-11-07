@@ -168,8 +168,9 @@ class Blocksmith:
             >>> # With remote image URL
             >>> result = bs.generate("blocky version", image="https://example.com/car.jpg")
         """
-        model_name = model or self.default_model
-        gen_response = self.generator.generate(prompt, model=model_name, image=image)
+        # Pass model as-is (None or explicit value) so generator can use persistent client
+        # when no model override is specified (needed for session stats tracking)
+        gen_response = self.generator.generate(prompt, model=model, image=image)
 
         return GenerationResult(
             dsl=gen_response.code,

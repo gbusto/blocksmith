@@ -35,7 +35,8 @@ jobs:
         env:
           CI: true
         run: |
-          pytest tests/ -v --tb=short
+          # Run unit tests only (exclude integration tests which require API keys)
+          pytest tests/ -v --tb=short --ignore=tests/integration
 
       - name: Test summary
         if: always()
