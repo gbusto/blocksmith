@@ -145,7 +145,7 @@ result = bs.generate("make this blocky", image="https://example.com/car.jpg")
 
 ---
 
-## 5. CLI Support
+## 5. CLI Support ✅ **COMPLETE**
 
 **Goal:** Command-line interface for easy usage.
 
@@ -175,11 +175,11 @@ blocksmith generate "a cube" -o cube.glb --verbose  # Show token/cost info
 - Pretty print errors and stats
 - Progress indicators for long operations?
 
-**Files to create/modify:**
-- `blocksmith/cli.py` (new)
-- `pyproject.toml` (add scripts entry point)
-- `README.md` (update with CLI examples)
-- Add integration tests
+**Files created/modified:**
+- `blocksmith/cli.py` (new - full CLI implementation with click)
+- `pyproject.toml` (added click dependency and blocksmith CLI entry point)
+- `tests/test_cli.py` (new - 9 CLI tests for command structure and error handling)
+- CLI commands: generate, convert with --verbose flags
 
 ---
 

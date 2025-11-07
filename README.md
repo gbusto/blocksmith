@@ -158,7 +158,7 @@ BlockSmith defaults to **Gemini 2.5 Pro** (best quality) but supports other mode
 bs = Blocksmith(default_model="gemini/gemini-2.5-flash")
 
 # Use Gemini Flash (fastest, cheapest)
-bs = Blocksmith(default_model="gemini/gemini-2.5-lite")
+bs = Blocksmith(default_model="gemini/gemini-2.5-flash-lite")
 
 # Use OpenAI (requires OPENAI_API_KEY)
 bs = Blocksmith(default_model="gpt-5")
