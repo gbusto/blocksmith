@@ -59,6 +59,11 @@ line-length = 100
 target-version = "py312"
 
 [tool.pytest.ini_options]
+# Exclude integration tests by default (they require API keys and cost money)
+# Run them explicitly with: pytest tests/integration/
+testpaths = ["tests"]
+norecursedirs = ["tests/integration"]
+
 filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince20"
 ]
