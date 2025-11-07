@@ -9,9 +9,12 @@ BlockSmith is a powerful Python library for generating block-style 3D models tha
 ## Features
 
 - 🎨 **Text-to-3D**: Generate block models from simple text descriptions
+- 🖼️ **Image-to-3D**: Generate from reference images (local files or URLs)
+- 💻 **CLI + SDK**: Use from command line or Python code
 - 🧱 **True Block Geometry**: Perfect cube geometry, not just "blocky-looking" models
 - 🚀 **Lightweight**: Minimal dependencies, optimized for performance
 - 🔄 **Multiple Formats**: Export to GLB, GLTF, BBModel (Blockbench), JSON, or Python DSL
+- 📊 **Session Tracking**: Monitor token usage and costs
 - 🤖 **Agent-Friendly**: Clean API perfect for AI coding assistants
 - 🎮 **Game-Ready**: Optimized for engines like Hytopia, Minecraft mods, and more
 
@@ -105,6 +108,21 @@ export BLENDER_PATH="/usr/bin/blender"
 
 ## Quick Start
 
+### CLI (Easiest)
+
+```bash
+# Generate a model from text
+blocksmith generate "a medieval castle" -o castle.bbmodel
+
+# With reference image
+blocksmith generate "turn this into blocks" --image photo.jpg -o model.glb
+
+# Convert between formats
+blocksmith convert castle.bbmodel castle.glb
+```
+
+### Python SDK
+
 ```python
 from blocksmith import Blocksmith
 
@@ -115,12 +133,46 @@ bs = Blocksmith()
 bs.generate("a medieval castle").save("castle.bbmodel")
 ```
 
-**That's it!** You now have a 3D model ready to open in Blockbench.
+**That's it!** You now have a 3D model ready to use.
 
 ## Usage
 
-### Basic Generation
+### CLI Usage
 
+**Generate models:**
+```bash
+# Basic generation
+blocksmith generate "a red sports car" -o car.glb
+
+# With different model (faster/cheaper)
+blocksmith generate "a tree" -o tree.bbmodel --model gemini/gemini-2.5-flash-lite
+
+# With reference image (local or URL)
+blocksmith generate "blocky version" --image photo.jpg -o model.glb
+blocksmith generate "turn this into blocks" --image https://example.com/car.jpg -o car.glb
+
+# Show detailed stats
+blocksmith generate "a castle" -o castle.glb --verbose
+```
+
+**Convert formats:**
+```bash
+# Convert between any supported formats
+blocksmith convert model.glb model.bbmodel
+blocksmith convert castle.json castle.gltf
+blocksmith convert tree.bbmodel tree.json
+```
+
+**Get help:**
+```bash
+blocksmith --help
+blocksmith generate --help
+blocksmith convert --help
+```
+
+### Python SDK Usage
+
+**Basic generation:**
 ```python
 from blocksmith import Blocksmith
 
@@ -129,11 +181,16 @@ bs = Blocksmith()
 # Generate and save directly
 bs.generate("a red sports car").save("car.glb")
 
-# Or access intermediate formats
+# Access generation results and metadata
 result = bs.generate("a tree")
-print(result.dsl)   # Python DSL code
-print(result.json)  # BlockJSON schema
-print(result.gltf)  # GLTF dict
+print(result.dsl)     # Python DSL code
+print(result.tokens)  # TokenUsage(prompt=100, completion=50, total=150)
+print(result.cost)    # 0.0023 (USD) or None for local models
+print(result.model)   # "gemini/gemini-2.5-pro"
+
+# Explicitly convert DSL to BlockJSON
+block_json = result.to_json()
+print(block_json["entities"])
 ```
 
 ### Save Multiple Formats
@@ -149,28 +206,75 @@ result.save("spaceship.json")     # BlockJSON schema
 result.save("spaceship.py")       # Python DSL source
 ```
 
-### Using Different LLM Models
+### Advanced Features
 
-BlockSmith defaults to **Gemini 2.5 Pro** (best quality) but supports other models:
-
+**Use different LLM models:**
 ```python
-# Use Gemini Flash (faster, cheaper)
-bs = Blocksmith(default_model="gemini/gemini-2.5-flash")
-
-# Use Gemini Flash (fastest, cheapest)
+# Use Gemini Flash Lite (fastest, cheapest)
 bs = Blocksmith(default_model="gemini/gemini-2.5-flash-lite")
 
 # Use OpenAI (requires OPENAI_API_KEY)
-bs = Blocksmith(default_model="gpt-5")
+bs = Blocksmith(default_model="gpt-4o")
 
 # Or override per-generation
 result = bs.generate("a tree", model="gemini/gemini-2.5-flash")
 ```
 
 **Supported Providers:**
-- **Gemini** (recommended): `gemini/gemini-2.5-pro`, `gemini/gemini-2.5-flash`
-- **OpenAI**: `gpt-5`
+- **Gemini** (recommended): `gemini/gemini-2.5-pro`, `gemini/gemini-2.5-flash`, `gemini/gemini-2.5-flash-lite`
+- **OpenAI**: `gpt-4o`, `gpt-4o-mini`
 - Any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers)
+
+**Generate with reference images:**
+```python
+# Local image file
+result = bs.generate(
+    "turn this into a blocky model",
+    image="photo.jpg"
+)
+
+# Remote image URL
+result = bs.generate(
+    "blocky version of this car",
+    image="https://example.com/car.jpg"
+)
+```
+
+**Track session statistics:**
+```python
+bs = Blocksmith()
+
+# Generate some models
+bs.generate("a cube").save("cube.glb")
+bs.generate("a tree").save("tree.glb")
+
+# Get session stats
+stats = bs.get_stats()
+print(stats)
+# {
+#   'model': 'gemini/gemini-2.5-pro',
+#   'call_count': 2,
+#   'total_tokens': 3500,
+#   'total_cost': 0.0056,
+#   'avg_tokens_per_call': 1750
+# }
+
+# Reset stats
+bs.reset_stats()
+```
+
+**Convert between formats:**
+```python
+from blocksmith import convert
+
+# Module-level converter
+convert("model.glb", "model.bbmodel")
+convert("castle.json", "castle.gltf")
+
+# Or use the client method
+bs = Blocksmith()
+bs.convert("input.glb", "output.bbmodel")
+```
 
 ## Examples
 
@@ -286,20 +390,36 @@ Blocksmith(default_model="gemini/gemini-2.5-pro")
 - `default_model` (str): LLM model to use (default: "gemini/gemini-2.5-pro")
 
 **Methods:**
-- `generate(prompt: str, model: str = None) -> GenerationResult`
+- `generate(prompt: str, model: str = None, image: str = None) -> GenerationResult`
   - `prompt`: Text description of the model to generate
   - `model`: Override the default model for this generation
+  - `image`: Optional reference image (local file path or HTTP/HTTPS URL)
+
+- `get_stats() -> dict`
+  - Returns session statistics (call_count, total_tokens, total_cost, etc.)
+
+- `reset_stats()`
+  - Reset session statistics
+
+- `convert(input_path: str, output_path: str)`
+  - Convert a model from one format to another
 
 ### `GenerationResult`
 
-Result object with lazy format conversions.
+Result object containing generated model and metadata.
 
 **Properties:**
 - `dsl: str` - Python DSL source code
-- `json: dict` - BlockJSON JSON schema (converted on first access)
+- `tokens: TokenUsage` - Token usage (prompt_tokens, completion_tokens, total_tokens)
+- `cost: float | None` - Cost in USD (None for local models)
+- `model: str` - Model used for generation
 
 **Methods:**
-- `save(path: str, filetype: str = None)` - Save to file
+- `to_json() -> dict`
+  - Explicitly convert Python DSL to BlockJSON schema
+
+- `save(path: str, filetype: str = None)`
+  - Save to file (auto-detects format from extension)
   - `path`: Output file path
   - `filetype`: Optional format override ('py', 'json', 'bbmodel', 'gltf', 'glb')
 
@@ -326,20 +446,29 @@ This design allows for:
 - Easy validation and manipulation
 - Support for multiple output formats
 
-## Limitations (v0.0.1)
+## Limitations (v0.1)
 
-This is an early release focused on model generation. Current limitations:
+This is an alpha release focused on core model generation. Current limitations:
 
-- ⚠️ **Requires Blender** for GLB/GLTF export only
-- ❌ No texture generation yet (coming in v0.2)
-- ❌ No animation support yet (coming in v0.3)
+- ⚠️ **Requires Blender** for GLB/GLTF export only (BBModel, JSON, Python DSL work without Blender)
+- ❌ No texture generation yet (coming in v0.2) - models are currently monochrome geometry
+- ❌ No animation support yet (coming in v0.2)
 - ✅ Geometry generation works great!
+- ✅ CLI, SDK, image support, and format conversion all working!
 
 ## Roadmap
 
+**v0.1 (Current)**
+- ✅ Core model generation
+- ✅ Multi-format export (GLB, GLTF, BBModel, JSON, Python DSL)
+- ✅ Image-based generation (reference images)
+- ✅ CLI tool with generate and convert commands
+- ✅ Session statistics and cost tracking
+- ✅ Format conversion API
+
+**v0.2 (Planned)**
 - [ ] Texture generation
 - [ ] Animation support
-- [ ] CLI tool (`blocksmith generate "a castle" -o castle.glb`)
 - [ ] Blockbench plugin
 - [ ] Web UI
 
