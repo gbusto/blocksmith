@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "blocksmith"
+version = "0.0.1"
+description = "Generate voxel/block-based 3D models from text prompts using AI. Export to BBModel, GLTF, GLB, and more."
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+# NOTE: Blender must be installed separately for GLTF/GLB export
+# See README.md for installation instructions
+authors = [
+    {name = "Gabriel Busto", email = "gabriel@blocksmith.ai"}
+]
+keywords = ["voxel", "3d", "generative-ai", "llm", "blockbench", "minecraft"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+]
+
+dependencies = [
+    "pydantic==2.11.5",
+    "dspy==2.6.27",
+    "dspy-ai==2.6.27",
+    "trimesh==4.6.11",
+    "pygltflib==1.16.4",
+    "numpy==2.2.6",
+    "litellm==1.72.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/gbusto/blocksmithai"
+Documentation = "https://github.com/gbusto/blocksmithai#readme"
+Repository = "https://github.com/gbusto/blocksmithai"
+Issues = "https://github.com/gbusto/blocksmithai/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["blocksmith*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecatedSince20"
+]
