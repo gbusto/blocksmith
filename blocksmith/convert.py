@@ -11,6 +11,8 @@ from typing import Optional
 from blocksmith.converters import (
     import_python,
     import_bbmodel,
+    import_gltf,
+    import_glb,
     export_glb,
     export_gltf,
     export_bbmodel
@@ -93,11 +95,8 @@ def _load_to_blockjson(path: str, format: str) -> dict:
         return import_python(python_code)
 
     elif format in ('glb', 'gltf'):
-        # GLB/GLTF -> BlockJSON not yet supported
-        raise ValueError(
-            f"Converting from {format.upper()} to other formats is not yet supported. "
-            "Please convert to GLB/GLTF as an output format only."
-        )
+        # GLB/GLTF -> BlockJSON (requires Blender)
+        return import_gltf(path)
 
     else:
         raise ValueError(f"Unsupported input format: {format}")

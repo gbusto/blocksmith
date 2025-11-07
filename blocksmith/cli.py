@@ -49,10 +49,8 @@ def generate(prompt, output, model, image, verbose):
         if verbose:
             click.echo(f"Model: {bs.default_model}")
 
-        # Generate model
-        with click.progressbar(length=1, label='Generating model') as bar:
-            result = bs.generate(prompt, image=image)
-            bar.update(1)
+        # Generate model (synchronous API call - no progress to track)
+        result = bs.generate(prompt, image=image)
 
         # Save output
         click.echo(f"Saving to: {output}")
@@ -114,10 +112,8 @@ def convert(input_path, output_path, verbose):
         if verbose:
             click.echo(f"Converting: {input_path} → {output_path}")
 
-        # Convert
-        with click.progressbar(length=1, label='Converting') as bar:
-            convert_model(input_path, output_path)
-            bar.update(1)
+        # Convert (synchronous operation - no progress to track)
+        convert_model(input_path, output_path)
 
         click.secho(f"✓ Success! Converted to {output_path}", fg='green')
 

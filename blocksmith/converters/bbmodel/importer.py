@@ -223,8 +223,11 @@ def import_bbmodel(
         # Ensure UVs/resolution for completeness
         from ..uv_utils import ensure_uvs  # type: ignore
         data = ensure_uvs(data, texel_density=texel_density, mode="strip")
-    except Exception:
-        logger.exception("Failed to ensure UVs on BBModel import; continuing")
+    except ModuleNotFoundError:
+        # uv_utils not available - skip UV processing (geometry-only import)
+        logger.debug("UV processing skipped (geometry-only import)")
+    except Exception as e:
+        logger.debug(f"UV processing failed: {e} (continuing with geometry-only)")
     
     return data
 
