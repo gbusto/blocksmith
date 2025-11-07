@@ -19,6 +19,10 @@ from pathlib import Path
 from blocksmith import Blocksmith
 
 
+# Default model for integration tests (cheap and fast)
+DEFAULT_TEST_MODEL = "gemini/gemini-2.5-flash-lite"
+
+
 # Skip all tests in this file if no API key is set
 pytestmark = pytest.mark.skipif(
     not os.getenv("GEMINI_API_KEY") and not os.getenv("OPENAI_API_KEY"),
@@ -31,7 +35,7 @@ class TestBasicGeneration:
 
     def test_simple_generation(self):
         """Test generating a simple model"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
         result = bs.generate("a simple red cube")
 
         # Verify result structure
@@ -52,7 +56,7 @@ class TestBasicGeneration:
 
     def test_generation_with_custom_model(self):
         """Test generation with a different model"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
         result = bs.generate("a blue sphere", model="gemini/gemini-2.0-flash-exp")
 
         assert result.dsl is not None
@@ -64,7 +68,7 @@ class TestBasicGeneration:
 
     def test_dsl_to_json_conversion(self):
         """Test that generated DSL can be converted to JSON"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
         result = bs.generate("a small green cube")
 
         # Convert to JSON
@@ -83,7 +87,7 @@ class TestImageGeneration:
 
     def test_generation_with_local_image(self):
         """Test generation with a local image file"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
 
         # Use the test image we created
         test_image = Path(__file__).parent.parent / "test_image.jpg"
@@ -106,7 +110,7 @@ class TestImageGeneration:
     @pytest.mark.skip(reason="Remote image test - uncomment to run manually")
     def test_generation_with_remote_image(self):
         """Test generation with a remote image URL"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
 
         # Using a public domain image
         image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/240px-Cat03.jpg"
@@ -128,7 +132,7 @@ class TestFullPipeline:
 
     def test_generate_and_save_all_formats(self):
         """Test generating a model and saving to all formats"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
         result = bs.generate("a tiny yellow cube")
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,7 +166,7 @@ class TestFullPipeline:
 
     def test_session_stats(self):
         """Test session statistics tracking"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
 
         # Reset stats
         bs.reset_stats()
@@ -192,7 +196,7 @@ class TestErrorHandling:
 
     def test_missing_image_file_error(self):
         """Test that missing image file raises clear error"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
 
         with pytest.raises(FileNotFoundError) as exc_info:
             bs.generate("test", image="nonexistent_file.jpg")
@@ -202,7 +206,7 @@ class TestErrorHandling:
 
     def test_invalid_save_format_error(self):
         """Test that invalid save format raises clear error"""
-        bs = Blocksmith()
+        bs = Blocksmith(default_model=DEFAULT_TEST_MODEL)
         result = bs.generate("a cube")
 
         with pytest.raises(ValueError) as exc_info:

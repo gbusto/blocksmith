@@ -58,12 +58,13 @@ chmod +x .git/hooks/pre-push
 
 ## Cost Considerations
 
-Each test makes 1-2 API calls. With Gemini 2.5 Pro:
+Tests use `gemini/gemini-2.5-flash-lite` by default (very cheap):
+- Each test makes 1-2 API calls
 - ~1000-2000 tokens per generation
-- ~$0.001-0.003 per test
-- Full suite: ~$0.02-0.05
+- ~$0.0001-0.0003 per test (flash-lite pricing)
+- Full suite: ~$0.001-0.005 (less than a penny!)
 
-Use `gemini/gemini-2.0-flash-exp` for cheaper testing (10x less expensive).
+You can override the model in specific tests if needed.
 
 ## CI/CD
 
