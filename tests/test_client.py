@@ -47,8 +47,8 @@ class TestBlocksmithClient:
         assert result.dsl.strip() == MOCK_DSL_OUTPUT.strip()
 
     @patch('blocksmith.llm.client.litellm.completion')
-    def test_result_has_json_property(self, mock_completion):
-        """Test that GenerationResult converts DSL to JSON"""
+    def test_result_has_to_json_method(self, mock_completion):
+        """Test that GenerationResult can explicitly convert DSL to JSON"""
         # Mock the LiteLLM response
         mock_response = Mock()
         mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
@@ -58,8 +58,14 @@ class TestBlocksmithClient:
         bs = Blocksmith()
         result = bs.generate("a cube")
 
-        # Access json property (should trigger conversion)
-        json_data = result.json
+        # Test usage metadata
+        assert result.tokens.total_tokens == 30
+        assert result.tokens.prompt_tokens == 10
+        assert result.tokens.completion_tokens == 20
+        assert result.model == "gemini/gemini-2.5-pro"
+
+        # Explicitly convert to JSON
+        json_data = result.to_json()
         assert "entities" in json_data
         assert len(json_data["entities"]) == 1
 
@@ -117,10 +123,18 @@ class TestBlocksmithClient:
 
     def test_invalid_filetype_raises_error(self):
         """Test that invalid file extension raises clear error"""
+        from blocksmith.llm.client import TokenUsage
+
         bs = Blocksmith()
 
         # Create a mock result
-        result = GenerationResult(MOCK_DSL_OUTPUT, bs)
+        result = GenerationResult(
+            dsl=MOCK_DSL_OUTPUT,
+            tokens=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+            cost=0.001,
+            model="test-model",
+            _bs=bs
+        )
 
         with pytest.raises(ValueError) as exc_info:
             result.save("model.invalid")

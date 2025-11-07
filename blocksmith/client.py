@@ -8,50 +8,43 @@ class for handling conversions and saving.
 import json
 import os
 from typing import Optional, Literal
+from dataclasses import dataclass
 
 from blocksmith.generator.engine import ModelGenerator
 from blocksmith.converters import import_python, export_glb, export_gltf, export_bbmodel
+from blocksmith.llm.client import TokenUsage
 
 
+@dataclass
 class GenerationResult:
     """
-    Represents a generated model with lazy format conversions.
+    Represents a generated model with usage metadata.
 
-    This class provides access to the model in different formats:
-    - dsl: Python DSL source code
-    - json: BlockJSON schema
-
-    Conversions are performed lazily and cached for efficiency.
+    Attributes:
+        dsl: Python DSL source code
+        tokens: Token usage (prompt/completion/total)
+        cost: Generation cost in USD (None for local models)
+        model: Model used for generation
     """
+    dsl: str
+    tokens: TokenUsage
+    cost: Optional[float]
+    model: str
+    _bs: "Blocksmith" = None  # Private reference to parent instance
 
-    def __init__(self, dsl: str, blocksmith_instance: "Blocksmith"):
+    def to_json(self) -> dict:
         """
-        Initialize a generation result.
-
-        Args:
-            dsl: Python DSL source code for the model
-            blocksmith_instance: Parent Blocksmith instance for conversions
-        """
-        self._dsl = dsl
-        self._bs = blocksmith_instance
-        self._json = None
-
-    @property
-    def dsl(self) -> str:
-        """Python DSL source code"""
-        return self._dsl
-
-    @property
-    def json(self) -> dict:
-        """
-        BlockJSON JSON schema (converted on first access)
+        Explicitly convert Python DSL to BlockJSON schema.
 
         Returns:
             dict: Model in BlockJSON schema format
+
+        Example:
+            >>> result = bs.generate("a cube")
+            >>> block_json = result.to_json()
+            >>> print(block_json["entities"])
         """
-        if self._json is None:
-            self._json = self._bs._dsl_to_json(self._dsl)
-        return self._json
+        return self._bs._dsl_to_json(self.dsl)
 
     def save(self, path: str, filetype: Optional[str] = None) -> None:
         """
@@ -76,21 +69,25 @@ class GenerationResult:
             with open(path, 'w') as f:
                 f.write(self.dsl)
         elif filetype == "json":
+            block_json = self.to_json()
             with open(path, 'w') as f:
-                json.dump(self.json, f, indent=2)
+                json.dump(block_json, f, indent=2)
         elif filetype == "bbmodel":
             # Export BBModel (Blockbench format)
-            bbmodel_str = self._bs._json_to_bbmodel(self.json)
+            block_json = self.to_json()
+            bbmodel_str = self._bs._json_to_bbmodel(block_json)
             with open(path, 'w') as f:
                 f.write(bbmodel_str)
         elif filetype == "gltf":
             # Export GLTF via Blender (returns string)
-            gltf_str = self._bs._json_to_gltf(self.json)
+            block_json = self.to_json()
+            gltf_str = self._bs._json_to_gltf(block_json)
             with open(path, 'w') as f:
                 f.write(gltf_str)
         elif filetype == "glb":
             # Export GLB via Blender (returns bytes)
-            glb_bytes = self._bs._json_to_glb(self.json)
+            block_json = self.to_json()
+            glb_bytes = self._bs._json_to_glb(block_json)
             with open(path, 'wb') as f:
                 f.write(glb_bytes)
         else:
@@ -151,16 +148,46 @@ class Blocksmith:
             model: LLM model to use (overrides default_model if provided)
 
         Returns:
-            GenerationResult: Object with model in various formats
+            GenerationResult: Object with model, usage metadata, and save methods
 
         Examples:
             >>> bs = Blocksmith()
             >>> result = bs.generate("a medieval castle")
+            >>> print(result.dsl)      # Python DSL code
+            >>> print(result.tokens)   # Token usage
+            >>> print(result.cost)     # Cost in USD
             >>> result.save("castle.glb")
         """
         model_name = model or self.default_model
-        dsl = self.generator.generate(prompt, model=model_name)
-        return GenerationResult(dsl, self)
+        gen_response = self.generator.generate(prompt, model=model_name)
+
+        return GenerationResult(
+            dsl=gen_response.code,
+            tokens=gen_response.tokens,
+            cost=gen_response.cost,
+            model=gen_response.model,
+            _bs=self
+        )
+
+    def get_stats(self):
+        """
+        Get session statistics across all generations.
+
+        Returns:
+            Dict with total tokens, cost, call count, etc.
+
+        Example:
+            >>> bs = Blocksmith()
+            >>> bs.generate("a cube")
+            >>> bs.generate("a tree")
+            >>> print(bs.get_stats())
+            {'model': 'gemini/gemini-2.5-pro', 'call_count': 2, ...}
+        """
+        return self.generator.get_stats()
+
+    def reset_stats(self):
+        """Reset session statistics"""
+        self.generator.reset_stats()
 
     def _dsl_to_json(self, dsl: str) -> dict:
         """Convert Python DSL to BlockJSON schema"""

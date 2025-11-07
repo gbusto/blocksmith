@@ -8,10 +8,20 @@ This is a streamlined version without expert routing - just clean, simple genera
 import logging
 import re
 from typing import Optional
+from dataclasses import dataclass
 from blocksmith.generator.prompts import SYSTEM_PROMPT
-from blocksmith.llm import LLMClient, LLMResponse
+from blocksmith.llm import LLMClient, LLMResponse, TokenUsage
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GenerationResponse:
+    """Response from model generation with usage metadata"""
+    code: str                   # Generated Python DSL code
+    tokens: TokenUsage          # Token usage
+    cost: Optional[float]       # Cost in USD (None for local models)
+    model: str                  # Model used
 
 
 class ModelGenerator:
@@ -65,7 +75,7 @@ class ModelGenerator:
         # If no code blocks, assume entire response is code
         return response_text.strip()
 
-    def generate(self, prompt: str, model: Optional[str] = None) -> str:
+    def generate(self, prompt: str, model: Optional[str] = None) -> GenerationResponse:
         """
         Generate Python DSL code from a text prompt.
 
@@ -74,12 +84,13 @@ class ModelGenerator:
             model: Override the default model (optional)
 
         Returns:
-            Python DSL code as a string
+            GenerationResponse with code, tokens, cost, and model info
 
         Examples:
             >>> generator = ModelGenerator()
-            >>> code = generator.generate("a cube")
-            >>> print(code)
+            >>> response = generator.generate("a cube")
+            >>> print(response.code)
+            >>> print(response.tokens)
         """
         logger.info(f"Generating model for prompt: {prompt[:100]}...")
 
@@ -107,12 +118,14 @@ Return ONLY the Python code without any markdown formatting, explanations, or ex
                 temperature=0.7,
                 max_tokens=25000,
             )
-            response = temp_client.complete(messages)
+            llm_response = temp_client.complete(messages)
+            model_used = model
         else:
-            response = self.client.complete(messages)
+            llm_response = self.client.complete(messages)
+            model_used = self.model_name
 
         # Extract Python code from response
-        python_code = self._extract_code(response.content)
+        python_code = self._extract_code(llm_response.content)
 
         # Basic validation
         if not python_code or len(python_code.strip()) < 20:
@@ -121,11 +134,16 @@ Return ONLY the Python code without any markdown formatting, explanations, or ex
         # Log token usage and cost
         logger.info(
             f"Successfully generated {len(python_code)} characters of Python code. "
-            f"Tokens: {response.tokens.total_tokens}, "
-            f"Cost: ${response.cost:.4f}" if response.cost else f"Tokens: {response.tokens.total_tokens}"
+            f"Tokens: {llm_response.tokens.total_tokens}, "
+            f"Cost: ${llm_response.cost:.4f}" if llm_response.cost else f"Tokens: {llm_response.tokens.total_tokens}"
         )
 
-        return python_code
+        return GenerationResponse(
+            code=python_code,
+            tokens=llm_response.tokens,
+            cost=llm_response.cost,
+            model=model_used
+        )
 
     def get_stats(self):
         """
