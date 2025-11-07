@@ -189,6 +189,24 @@ class Blocksmith:
         """Reset session statistics"""
         self.generator.reset_stats()
 
+    def convert(self, input_path: str, output_path: str) -> None:
+        """
+        Convert a model from one format to another.
+
+        Convenience method that wraps the module-level convert() function.
+        Automatically detects formats from file extensions.
+
+        Args:
+            input_path: Path to input file
+            output_path: Path to output file
+
+        Example:
+            >>> bs = Blocksmith()
+            >>> bs.convert("model.glb", "model.bbmodel")
+        """
+        from blocksmith.convert import convert
+        convert(input_path, output_path)
+
     def _dsl_to_json(self, dsl: str) -> dict:
         """Convert Python DSL to BlockJSON schema"""
         return import_python(dsl)

@@ -21,7 +21,7 @@ Improvements for alpha release before sharing publicly.
 
 ---
 
-## 2. Update API - Remove Lazy Loading, Add Usage Info
+## 2. Update API - Remove Lazy Loading, Add Usage Info ✅ **COMPLETE**
 
 **Goal:** Make API more explicit and return generation metadata.
 

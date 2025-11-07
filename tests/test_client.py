@@ -141,3 +141,22 @@ class TestBlocksmithClient:
 
         assert "Supported" in str(exc_info.value)
         assert ".glb" in str(exc_info.value)
+
+    def test_stats_api_exists(self):
+        """Test that get_stats() and reset_stats() methods exist and work"""
+        bs = Blocksmith()
+
+        # get_stats() should return a dict with expected keys
+        stats = bs.get_stats()
+        assert isinstance(stats, dict)
+        assert "call_count" in stats
+        assert "total_tokens" in stats
+        assert "model" in stats
+        assert stats["model"] == "gemini/gemini-2.5-pro"
+
+        # reset_stats() should not raise an error
+        bs.reset_stats()
+
+        # After reset, call_count should still be accessible
+        stats = bs.get_stats()
+        assert "call_count" in stats
