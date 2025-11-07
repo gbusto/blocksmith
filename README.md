@@ -1,8 +1,8 @@
-# BlockSmith
+# BlockSmith (early testing)
 
 [![Tests](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml/badge.svg)](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml)
 
-**Generate block-based 3D models from text prompts using AI **
+**Generate block-based 3D models from text prompts using AI**
 
 BlockSmith is a powerful Python library for generating block-style 3D models that are perfect for games, art, and procedural content.
 
@@ -17,6 +17,54 @@ BlockSmith is a powerful Python library for generating block-style 3D models tha
 - 📊 **Session Tracking**: Monitor token usage and costs
 - 🤖 **Agent-Friendly**: Clean API perfect for AI coding assistants
 - 🎮 **Game-Ready**: Optimized for engines like Hytopia, Minecraft mods, and more
+
+## What You Can Do
+
+**Generate from anything:**
+```bash
+# Text to 3D model
+blocksmith generate "a castle" -o castle.glb
+
+# Image to 3D model (turn photos into block art!)
+blocksmith generate "blocky version" --image photo.jpg -o model.glb
+```
+
+**Convert between formats:**
+```bash
+# Import existing models and convert them
+blocksmith convert model.glb model.bbmodel      # GLB → Blockbench
+blocksmith convert tree.gltf tree.json         # GLTF → BlockJSON
+blocksmith convert castle.bbmodel castle.glb   # Blockbench → GLB
+```
+
+**Use it from Python:**
+```python
+from blocksmith import Blocksmith
+
+bs = Blocksmith()
+
+# Generate and save in any format
+bs.generate("a tree").save("tree.bbmodel")       # Blockbench
+bs.generate("a car").save("car.glb")             # Game-ready GLB
+bs.generate("a robot").save("robot.json")        # BlockJSON schema
+bs.generate("a house").save("house.py")          # Python DSL code
+
+# Generate with images
+bs.generate("turn this into blocks", image="photo.jpg").save("model.glb")
+
+# Track your usage and costs
+result = bs.generate("a spaceship")
+print(f"Tokens: {result.tokens.total_tokens}")
+print(f"Cost: ${result.cost:.4f}")
+```
+
+**Why BlockSmith?**
+- ✅ **No manual modeling** - Describe what you want, get a 3D model
+- ✅ **Perfect for games** - True block geometry, not approximations
+- ✅ **Multiple output formats** - Works with Blender, Blockbench, game engines
+- ✅ **Import existing models** - Convert your GLB/GLTF files to other formats
+- ✅ **Track your costs** - Know exactly how much each generation costs
+- ✅ **Fast iteration** - Regenerate until you get what you want
 
 ## Installation
 
