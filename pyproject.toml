@@ -30,6 +30,7 @@ dependencies = [
     "pygltflib==1.16.4",
     "numpy==2.2.6",
     "litellm==1.72.4",
+    "tenacity>=8.0.0",  # Required by litellm for retries
 ]
 
 [project.optional-dependencies]
