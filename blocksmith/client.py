@@ -138,14 +138,17 @@ class Blocksmith:
     def generate(
         self,
         prompt: str,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        image: Optional[str] = None
     ) -> GenerationResult:
         """
-        Generate a block model from a text prompt.
+        Generate a block model from a text prompt with optional reference image.
 
         Args:
             prompt: Text description of the model to generate
             model: LLM model to use (overrides default_model if provided)
+            image: Optional reference image (local file path or HTTP/HTTPS URL)
+                   Supports: .jpg, .jpeg, .png, .gif, .webp
 
         Returns:
             GenerationResult: Object with model, usage metadata, and save methods
@@ -157,9 +160,16 @@ class Blocksmith:
             >>> print(result.tokens)   # Token usage
             >>> print(result.cost)     # Cost in USD
             >>> result.save("castle.glb")
+
+            >>> # With reference image
+            >>> result = bs.generate("turn this into blocks", image="photo.jpg")
+            >>> result.save("model.glb")
+
+            >>> # With remote image URL
+            >>> result = bs.generate("blocky version", image="https://example.com/car.jpg")
         """
         model_name = model or self.default_model
-        gen_response = self.generator.generate(prompt, model=model_name)
+        gen_response = self.generator.generate(prompt, model=model_name, image=image)
 
         return GenerationResult(
             dsl=gen_response.code,

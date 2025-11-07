@@ -75,13 +75,15 @@ class ModelGenerator:
         # If no code blocks, assume entire response is code
         return response_text.strip()
 
-    def generate(self, prompt: str, model: Optional[str] = None) -> GenerationResponse:
+    def generate(self, prompt: str, model: Optional[str] = None, image: Optional[str] = None) -> GenerationResponse:
         """
-        Generate Python DSL code from a text prompt.
+        Generate Python DSL code from a text prompt with optional image.
 
         Args:
             prompt: Text description of the model to generate
             model: Override the default model (optional)
+            image: Optional image path or URL for multimodal generation
+                   Supports local files (.jpg, .png, etc) or HTTP/HTTPS URLs
 
         Returns:
             GenerationResponse with code, tokens, cost, and model info
@@ -90,9 +92,23 @@ class ModelGenerator:
             >>> generator = ModelGenerator()
             >>> response = generator.generate("a cube")
             >>> print(response.code)
-            >>> print(response.tokens)
+
+            >>> # With image
+            >>> response = generator.generate("turn this into blocks", image="photo.jpg")
         """
         logger.info(f"Generating model for prompt: {prompt[:100]}...")
+        if image:
+            logger.info(f"Using image: {image}")
+
+        # Build user content (text + optional image)
+        user_prompt_text = f"""# User Request
+{prompt}
+
+# Instructions
+Generate clean Python code that creates the requested model using the helpers provided above.
+Return ONLY the Python code without any markdown formatting, explanations, or extra text."""
+
+        user_content = LLMClient._build_multimodal_content(user_prompt_text, image)
 
         # Build messages for LLM
         messages = [
@@ -102,12 +118,7 @@ class ModelGenerator:
             },
             {
                 "role": "user",
-                "content": f"""# User Request
-{prompt}
-
-# Instructions
-Generate clean Python code that creates the requested model using the helpers provided above.
-Return ONLY the Python code without any markdown formatting, explanations, or extra text."""
+                "content": user_content
             }
         ]
 

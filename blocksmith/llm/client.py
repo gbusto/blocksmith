@@ -1,9 +1,12 @@
 """Generic LLM client supporting any provider via LiteLLM"""
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import litellm
 import logging
+import base64
+import os
+from pathlib import Path
 
 from .exceptions import LLMAPIError, LLMServiceError, LLMTimeoutError
 
@@ -80,18 +83,23 @@ class LLMClient:
 
     def complete(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         num_retries: int = 0,
         **override_kwargs
     ) -> LLMResponse:
         """
-        Send completion request to LLM.
+        Send completion request to LLM (supports multimodal with images).
 
         Args:
             messages: List of message dicts with 'role' and 'content'
-                      Example: [{"role": "user", "content": "Hello"}]
+                      Content can be a string or list of content parts (for images)
+                      Example text: [{"role": "user", "content": "Hello"}]
+                      Example multimodal: [{"role": "user", "content": [
+                          {"type": "text", "text": "What is this?"},
+                          {"type": "image_url", "image_url": {"url": "https://..."}}
+                      ]}]
             temperature: Override default temperature
             max_tokens: Override default max_tokens
             num_retries: Number of retries on transient errors (default: 0 - fail fast)
@@ -234,3 +242,85 @@ class LLMClient:
         """Check if model is local (Ollama, LlamaCpp, etc)"""
         local_prefixes = ["ollama/", "ollama_chat/", "openai/localhost"]
         return any(self.model.startswith(prefix) for prefix in local_prefixes)
+
+    @staticmethod
+    def _encode_image(image_path: str) -> str:
+        """
+        Encode local image file to base64.
+
+        Args:
+            image_path: Path to local image file
+
+        Returns:
+            Base64 encoded string
+
+        Raises:
+            FileNotFoundError: If image file doesn't exist
+        """
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+
+        return base64.b64encode(image_data).decode("utf-8")
+
+    @staticmethod
+    def _is_url(path: str) -> bool:
+        """Check if string is a URL"""
+        return path.startswith("http://") or path.startswith("https://")
+
+    @staticmethod
+    def _build_multimodal_content(text: str, image: Optional[str] = None) -> Union[str, List[Dict]]:
+        """
+        Build message content with optional image.
+
+        Args:
+            text: Text content
+            image: Optional image path (local file or URL)
+
+        Returns:
+            String for text-only, or list of content parts for multimodal
+        """
+        if image is None:
+            return text
+
+        # Multimodal message with image
+        content_parts = []
+
+        # Add text part
+        content_parts.append({
+            "type": "text",
+            "text": text
+        })
+
+        # Add image part
+        if LLMClient._is_url(image):
+            # Remote image URL
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": image}
+            })
+        else:
+            # Local image file - encode to base64
+            base64_image = LLMClient._encode_image(image)
+
+            # Detect mime type from extension
+            ext = Path(image).suffix.lower()
+            mime_type_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".webp": "image/webp"
+            }
+            mime_type = mime_type_map.get(ext, "image/jpeg")
+
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{mime_type};base64,{base64_image}"
+                }
+            })
+
+        return content_parts

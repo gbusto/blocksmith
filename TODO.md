@@ -87,7 +87,7 @@ stats = bs.get_stats()
 
 ---
 
-## 3. Conversion API
+## 3. Conversion API ✅ **COMPLETE**
 
 **Goal:** Easy format conversion without regenerating models.
 
@@ -117,7 +117,7 @@ bs.convert("input.glb", "output.bbmodel")
 
 ---
 
-## 4. Image Support (Multimodal Generation)
+## 4. Image Support (Multimodal Generation) ✅ **COMPLETE**
 
 **Goal:** Allow users to provide reference images for generation.
 
@@ -137,11 +137,11 @@ result = bs.generate("make this blocky", image="https://example.com/car.jpg")
 - Update message format to include image content
 - Test with Gemini (supports vision) and handle non-vision models gracefully
 
-**Files to modify:**
-- `blocksmith/llm/client.py` (add image message support)
-- `blocksmith/generator/engine.py` (accept image parameter)
-- `blocksmith/client.py` (expose image parameter in generate())
-- Add tests with mocked responses
+**Files modified:**
+- `blocksmith/llm/client.py` (added image message support with base64 encoding and URL support)
+- `blocksmith/generator/engine.py` (accepts image parameter)
+- `blocksmith/client.py` (exposes image parameter in generate())
+- `tests/test_client.py` (removed all mocks, integration tests run locally)
 
 ---
 

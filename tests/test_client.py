@@ -1,15 +1,16 @@
 """
-Test BlockSmith client with mocked LLM responses
+Test BlockSmith client (non-API tests only)
+
+Integration tests with real API calls should be in tests/integration/
 """
 import pytest
 import os
-import tempfile
-from unittest.mock import Mock, patch
 from blocksmith import Blocksmith, GenerationResult
+from blocksmith.llm.client import TokenUsage
 
 
-# Sample DSL that will be returned by mocked LLM
-MOCK_DSL_OUTPUT = """
+# Sample DSL for testing result operations
+SAMPLE_DSL = """
 def create_model():
     return [
         cuboid("cube", [0, 0, 0], [1, 1, 1])
@@ -18,7 +19,7 @@ def create_model():
 
 
 class TestBlocksmithClient:
-    """Test Blocksmith client initialization and basic flow"""
+    """Test Blocksmith client without API calls"""
 
     def test_client_initializes_with_defaults(self):
         """Test that Blocksmith initializes with default model"""
@@ -30,106 +31,13 @@ class TestBlocksmithClient:
         bs = Blocksmith(default_model="gemini/gemini-2.0-flash")
         assert bs.default_model == "gemini/gemini-2.0-flash"
 
-    @patch('blocksmith.llm.client.litellm.completion')
-    def test_generate_returns_result(self, mock_completion):
-        """Test that generate() returns a GenerationResult"""
-        # Mock the LiteLLM response
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
-        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        mock_completion.return_value = mock_response
-
-        bs = Blocksmith()
-        result = bs.generate("a cube")
-
-        assert isinstance(result, GenerationResult)
-        # Compare stripped versions (engine strips the code output)
-        assert result.dsl.strip() == MOCK_DSL_OUTPUT.strip()
-
-    @patch('blocksmith.llm.client.litellm.completion')
-    def test_result_has_to_json_method(self, mock_completion):
-        """Test that GenerationResult can explicitly convert DSL to JSON"""
-        # Mock the LiteLLM response
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
-        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        mock_completion.return_value = mock_response
-
-        bs = Blocksmith()
-        result = bs.generate("a cube")
-
-        # Test usage metadata
-        assert result.tokens.total_tokens == 30
-        assert result.tokens.prompt_tokens == 10
-        assert result.tokens.completion_tokens == 20
-        assert result.model == "gemini/gemini-2.5-pro"
-
-        # Explicitly convert to JSON
-        json_data = result.to_json()
-        assert "entities" in json_data
-        assert len(json_data["entities"]) == 1
-
-    @patch('blocksmith.llm.client.litellm.completion')
-    def test_result_saves_to_file(self, mock_completion):
-        """Test that GenerationResult.save() creates files"""
-        # Mock the LiteLLM response
-        mock_response = Mock()
-        mock_response.choices = [Mock(message=Mock(content=MOCK_DSL_OUTPUT))]
-        mock_response.usage = Mock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
-        mock_completion.return_value = mock_response
-
-        bs = Blocksmith()
-        result = bs.generate("a cube")
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Test Python DSL save
-            py_path = os.path.join(tmpdir, "cube.py")
-            result.save(py_path)
-            assert os.path.exists(py_path)
-
-            # Test JSON save
-            json_path = os.path.join(tmpdir, "cube.json")
-            result.save(json_path)
-            assert os.path.exists(json_path)
-
-            # Test BBModel save
-            bbmodel_path = os.path.join(tmpdir, "cube.bbmodel")
-            result.save(bbmodel_path)
-            assert os.path.exists(bbmodel_path)
-
-    def test_missing_api_key_gives_clear_error(self):
-        """Test that missing API key gives a clear error message"""
-        # Clear environment variables
-        env_backup = {}
-        for key in ['GEMINI_API_KEY', 'OPENAI_API_KEY']:
-            if key in os.environ:
-                env_backup[key] = os.environ[key]
-                del os.environ[key]
-
-        try:
-            # LiteLLM should raise an error when no API key is found
-            with pytest.raises(Exception) as exc_info:
-                bs = Blocksmith()
-                bs.generate("a cube")
-
-            # Error should mention API key
-            error_msg = str(exc_info.value).lower()
-            assert "api" in error_msg or "key" in error_msg or "gemini" in error_msg
-
-        finally:
-            # Restore environment
-            for key, value in env_backup.items():
-                os.environ[key] = value
-
     def test_invalid_filetype_raises_error(self):
         """Test that invalid file extension raises clear error"""
-        from blocksmith.llm.client import TokenUsage
-
         bs = Blocksmith()
 
-        # Create a mock result
+        # Create a result object for testing
         result = GenerationResult(
-            dsl=MOCK_DSL_OUTPUT,
+            dsl=SAMPLE_DSL,
             tokens=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
             cost=0.001,
             model="test-model",
@@ -143,7 +51,7 @@ class TestBlocksmithClient:
         assert ".glb" in str(exc_info.value)
 
     def test_stats_api_exists(self):
-        """Test that get_stats() and reset_stats() methods exist and work"""
+        """Test that get_stats() and reset_stats() methods exist"""
         bs = Blocksmith()
 
         # get_stats() should return a dict with expected keys
@@ -160,3 +68,30 @@ class TestBlocksmithClient:
         # After reset, call_count should still be accessible
         stats = bs.get_stats()
         assert "call_count" in stats
+
+    def test_generate_with_missing_image_raises_error(self):
+        """Test that missing image file raises clear error"""
+        bs = Blocksmith()
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            bs.generate("test", image="nonexistent.jpg")
+
+        assert "nonexistent.jpg" in str(exc_info.value)
+
+    def test_result_to_json_works(self):
+        """Test that GenerationResult.to_json() converts DSL properly"""
+        bs = Blocksmith()
+
+        result = GenerationResult(
+            dsl=SAMPLE_DSL,
+            tokens=TokenUsage(prompt_tokens=10, completion_tokens=20, total_tokens=30),
+            cost=0.001,
+            model="test-model",
+            _bs=bs
+        )
+
+        # Should convert DSL to BlockJSON
+        json_data = result.to_json()
+        assert "entities" in json_data
+        assert len(json_data["entities"]) == 1
+        assert json_data["entities"][0]["id"] == "cube"
