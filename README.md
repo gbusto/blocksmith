@@ -48,7 +48,7 @@ BlockSmith uses **Gemini 2.5 Pro** by default (best quality for block models).
 2. Click "Create API Key" in the top left and follow the instructions
 3. Copy your key
 
-If you need help with this, let me know. OR, just use OpenAI, or even a free and local model if you want.
+If you need help with this, let me know. OR, just use OpenAI, or even a free and local model if you want. If you run into a lot of issues with 429/rate limit errors, it's worth adding your billing info to get more use out of Gemini.
 
 **Set the environment variable:**
 
@@ -142,7 +142,7 @@ bs.generate("a medieval castle").save("castle.bbmodel")
 **Generate models:**
 ```bash
 # Basic generation
-blocksmith generate "a red sports car" -o car.glb
+blocksmith generate "a car" -o car.glb
 
 # With different model (faster/cheaper)
 blocksmith generate "a tree" -o tree.bbmodel --model gemini/gemini-2.5-flash-lite
@@ -179,13 +179,13 @@ from blocksmith import Blocksmith
 bs = Blocksmith()
 
 # Generate and save directly
-bs.generate("a red sports car").save("car.glb")
+bs.generate("a car").save("car.glb")
 
 # Access generation results and metadata
 result = bs.generate("a tree")
 print(result.dsl)     # Python DSL code
-print(result.tokens)  # TokenUsage(prompt=100, completion=50, total=150)
-print(result.cost)    # 0.0023 (USD) or None for local models
+print(result.tokens)  # TokenUsage(prompt=13720, completion=2909, total=16629)
+print(result.cost)    # 0.046 (USD) or None for local models
 print(result.model)   # "gemini/gemini-2.5-pro"
 
 # Explicitly convert DSL to BlockJSON
@@ -214,7 +214,7 @@ result.save("spaceship.py")       # Python DSL source
 bs = Blocksmith(default_model="gemini/gemini-2.5-flash-lite")
 
 # Use OpenAI (requires OPENAI_API_KEY)
-bs = Blocksmith(default_model="gpt-4o")
+bs = Blocksmith(default_model="gpt-5")
 
 # Or override per-generation
 result = bs.generate("a tree", model="gemini/gemini-2.5-flash")
@@ -254,9 +254,9 @@ print(stats)
 # {
 #   'model': 'gemini/gemini-2.5-pro',
 #   'call_count': 2,
-#   'total_tokens': 3500,
-#   'total_cost': 0.0056,
-#   'avg_tokens_per_call': 1750
+#   'total_tokens': 33258,  # ~16.6k per call
+#   'total_cost': 0.092,    # ~$0.046 per call
+#   'avg_tokens_per_call': 16629
 # }
 
 # Reset stats
@@ -278,7 +278,9 @@ bs.convert("input.glb", "output.bbmodel")
 
 ## Examples
 
-> **Note:** Texture generation is not yet implemented (coming in v0.2). Models are currently monochrome geometry.
+> **Important:** BlockSmith currently generates **geometry only** - no textures or colors. All models are monochrome block geometry. Texture generation is coming in v0.2.
+>
+> **Tip:** Focus your prompts on shape and structure, not colors or materials. For example: "a car" not "a red car", "a tree" not "a green tree".
 
 ### Start Simple
 
