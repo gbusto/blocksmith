@@ -2,6 +2,46 @@
 
 Quick guide for testing BlockSmith locally before it's published to PyPI.
 
+## Environment Setup (Recommended: direnv)
+
+For a better development experience, use **direnv** to automatically manage environment variables:
+
+**Install direnv:**
+```bash
+# macOS
+brew install direnv
+
+# Linux (Ubuntu/Debian)
+sudo apt install direnv
+
+# Add to your shell (~/.bashrc, ~/.zshrc, etc.)
+eval "$(direnv hook bash)"  # or zsh, fish, etc.
+```
+
+**Setup (automatic):**
+```bash
+cd blocksmith
+direnv allow  # Creates .env from template automatically
+```
+
+Edit `.env` with your actual API keys:
+```bash
+GEMINI_API_KEY=your-actual-key-here
+```
+
+**Benefits:**
+- ✅ Project-scoped (only loaded in this directory)
+- ✅ Auto-loads when entering repo, unloads when leaving
+- ✅ No need for manual `export` or `source` commands
+- ✅ `.env` is gitignored (prevents accidental commits)
+
+**Alternative (manual export):** If you prefer not to use direnv, you can manually export environment variables:
+```bash
+export GEMINI_API_KEY="your-key-here"
+```
+
+For detailed setup instructions, see the [main README](README.md#2-set-up-api-key).
+
 ## Quick Start (Using uv - Recommended)
 
 **uv** is much faster than pip/venv. Install it first:
@@ -23,12 +63,11 @@ uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e .
 
-# Set your API key
-export GEMINI_API_KEY="your-key-here"
-
 # Test it!
 python examples/quickstart.py
 ```
+
+**Note:** Make sure you've configured your API key using the Environment Setup section above.
 
 ## Alternative: Standard pip/venv
 
@@ -44,12 +83,11 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install in editable mode
 pip install -e .
 
-# Set API key
-export GEMINI_API_KEY="your-key-here"
-
 # Test
 python examples/quickstart.py
 ```
+
+**Note:** Make sure you've configured your API key using the Environment Setup section above.
 
 ## Install Blender
 
@@ -87,6 +125,8 @@ export BLENDER_PATH="/usr/bin/blender"
 # Windows
 set BLENDER_PATH="C:\Program Files\Blender Foundation\Blender\blender.exe"
 ```
+
+If using direnv, add this to your `.env` file instead.
 
 ## Quick Test
 
@@ -129,7 +169,19 @@ blocksmith/
 ## Troubleshooting
 
 ### "No API key found"
-Set your LLM API key:
+
+**If using direnv:**
+1. Make sure you ran `direnv allow`
+2. Check that `.env` exists and contains your key:
+   ```bash
+   cat .env  # Should show GEMINI_API_KEY=your-key
+   ```
+3. Verify it's loaded:
+   ```bash
+   echo $GEMINI_API_KEY  # Should print your key
+   ```
+
+**If using manual export:**
 ```bash
 export GEMINI_API_KEY="your-key"
 # or
