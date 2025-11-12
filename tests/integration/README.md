@@ -16,7 +16,8 @@
 ## Running Integration Tests
 
 ```bash
-# Source your API key first
+# If using direnv, variables are already loaded (skip this step)
+# If NOT using direnv, load your API key first:
 source .env
 
 # Run all integration tests
@@ -28,6 +29,8 @@ pytest tests/integration/test_generation.py -v -s
 # Run specific test
 pytest tests/integration/test_generation.py::TestBasicGeneration::test_simple_generation -v -s
 ```
+
+**Note:** If you're using direnv (see [main README](../../README.md#2-set-up-api-key)), environment variables are automatically loaded when you `cd` into the repo - no need to run `source .env`.
 
 ## What Gets Tested
 
