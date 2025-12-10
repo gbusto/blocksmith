@@ -52,3 +52,5 @@ examples/output/
 Thumbs.db
 
 *.bbmodel
+
+.models/

@@ -6,7 +6,7 @@ that are perfect for games, voxel art, and procedural content.
 """
 
 from blocksmith.client import Blocksmith, GenerationResult
-from blocksmith.convert import convert
+from blocksmith.converters.convert import convert
 
 __version__ = "0.0.1"
 __all__ = ["Blocksmith", "GenerationResult", "convert"]

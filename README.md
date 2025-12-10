@@ -326,10 +326,6 @@ bs.convert("input.glb", "output.bbmodel")
 
 ## Examples
 
-> **Important:** BlockSmith currently generates **geometry only** - no textures or colors. All models are monochrome block geometry. Texture generation is coming in v0.2.
->
-> **Tip:** Focus your prompts on shape and structure, not colors or materials. For example: "a car" not "a red car", "a tree" not "a green tree".
-
 ### Start Simple
 
 ```python
@@ -498,10 +494,9 @@ This design allows for:
 
 ## Limitations (v0.1)
 
-This is an alpha release focused on core model generation. Current limitations:
+This is an alpha release focused on core features. Current limitations:
 
 - ⚠️ **Requires Blender** for GLB/GLTF export only (BBModel, JSON, Python DSL work without Blender)
-- ❌ No texture generation yet (coming in v0.2) - models are currently monochrome geometry
 - ❌ No animation support yet (coming in v0.2)
 - ✅ Geometry generation works great!
 - ✅ CLI, SDK, image support, and format conversion all working!
@@ -517,7 +512,6 @@ This is an alpha release focused on core model generation. Current limitations:
 - ✅ Format conversion API
 
 **v0.2 (Planned)**
-- [ ] Texture generation
 - [ ] Animation support
 - [ ] Blockbench plugin
 - [ ] Web UI

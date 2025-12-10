@@ -215,7 +215,7 @@ class Blocksmith:
             >>> bs = Blocksmith()
             >>> bs.convert("model.glb", "model.bbmodel")
         """
-        from blocksmith.convert import convert
+        from blocksmith.converters.convert import convert
         convert(input_path, output_path)
 
     def _dsl_to_json(self, dsl: str) -> dict:

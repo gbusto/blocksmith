@@ -6,7 +6,7 @@ import click
 import sys
 from pathlib import Path
 from blocksmith import Blocksmith
-from blocksmith.convert import convert as convert_model
+from blocksmith.converters.convert import convert as convert_model
 from blocksmith.llm.exceptions import LLMAPIError, LLMServiceError, LLMTimeoutError
 
 

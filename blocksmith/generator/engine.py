@@ -32,12 +32,12 @@ class ModelGenerator:
     generates clean Python code using the BlockSmith modeling API.
     """
 
-    def __init__(self, model: str = "gemini/gemini-2.5-pro"):
+    def __init__(self, model: str = "gemini/gemini-3-pro-preview"):
         """
         Initialize the model generator.
 
         Args:
-            model: LLM model to use (default: gemini/gemini-2.5-pro)
+            model: LLM model to use (default: gemini/gemini-3-pro-preview)
                    API keys read from environment (GEMINI_API_KEY or OPENAI_API_KEY)
         """
         self.model_name = model
