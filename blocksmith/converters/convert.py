@@ -17,6 +17,7 @@ from blocksmith.converters import (
     export_gltf,
     export_bbmodel
 )
+from blocksmith.converters.python.exporter import V3ToPythonConverter
 
 
 def convert(input_path: str, output_path: str) -> None:
@@ -38,6 +39,7 @@ def convert(input_path: str, output_path: str) -> None:
         >>> convert("model.glb", "model.bbmodel")
         >>> convert("model.json", "model.glb")
         >>> convert("model.bbmodel", "output.json")
+        >>> convert("model.glb", "model.py")
     """
     # Check input file exists
     if not os.path.exists(input_path):
@@ -128,11 +130,11 @@ def _save_from_blockjson(block_json: dict, path: str, format: str) -> None:
             f.write(gltf_str)
 
     elif format == 'py':
-        # BlockJSON -> Python DSL not implemented
-        raise ValueError(
-            "Converting to Python DSL (.py) is not yet supported. "
-            "Python DSL is a generation output format only."
-        )
+        # BlockJSON -> Python DSL
+        converter = V3ToPythonConverter()
+        python_code = converter.convert(block_json)
+        with open(path, 'w') as f:
+            f.write(python_code)
 
     else:
         raise ValueError(f"Unsupported output format: {format}")

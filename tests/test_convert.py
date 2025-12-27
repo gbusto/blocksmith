@@ -122,3 +122,77 @@ class TestConvertAPI:
             convert(json_path, bbmodel_path)
 
             assert os.path.exists(bbmodel_path)
+
+    def test_convert_json_to_python(self):
+        """Test converting JSON to Python DSL"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = os.path.join(tmpdir, "model.json")
+            python_path = os.path.join(tmpdir, "model.py")
+
+            block_json = import_python(SAMPLE_DSL)
+            with open(json_path, 'w') as f:
+                json.dump(block_json, f)
+
+            # Convert JSON -> Python DSL
+            convert(json_path, python_path)
+
+            # Verify output exists
+            assert os.path.exists(python_path)
+
+            # Verify it's valid Python code
+            with open(python_path, 'r') as f:
+                python_code = f.read()
+                assert "def create_model():" in python_code
+                assert "return [" in python_code
+                assert "cuboid(" in python_code
+
+    def test_convert_glb_to_python(self):
+        """Test converting GLB to Python DSL (requires Blender)"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a GLB file first
+            json_path = os.path.join(tmpdir, "model.json")
+            glb_path = os.path.join(tmpdir, "model.glb")
+            python_path = os.path.join(tmpdir, "model.py")
+
+            block_json = import_python(SAMPLE_DSL)
+            with open(json_path, 'w') as f:
+                json.dump(block_json, f)
+
+            # JSON -> GLB
+            convert(json_path, glb_path)
+
+            # GLB -> Python DSL
+            convert(glb_path, python_path)
+
+            # Verify output exists
+            assert os.path.exists(python_path)
+
+            # Verify it's valid Python code
+            with open(python_path, 'r') as f:
+                python_code = f.read()
+                assert "def create_model():" in python_code
+                assert "return [" in python_code
+
+    def test_convert_python_roundtrip(self):
+        """Test that JSON -> Python -> JSON preserves structure"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = os.path.join(tmpdir, "model.json")
+            python_path = os.path.join(tmpdir, "model.py")
+            json_output_path = os.path.join(tmpdir, "output.json")
+
+            # Start with BlockJSON
+            block_json = import_python(SAMPLE_DSL)
+            with open(json_path, 'w') as f:
+                json.dump(block_json, f)
+
+            # JSON -> Python
+            convert(json_path, python_path)
+
+            # Python -> JSON
+            convert(python_path, json_output_path)
+
+            # Verify structure preserved
+            with open(json_output_path, 'r') as f:
+                output_json = json.load(f)
+                assert "entities" in output_json
+                assert len(output_json["entities"]) == len(block_json["entities"])
