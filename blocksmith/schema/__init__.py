@@ -1,23 +1,26 @@
-"""BlockJSON schema models (Pydantic)"""
-
-from blocksmith.schema.blockjson import (
-    BaseEntity,
+"""v3 Schema definitions."""
+from .blockjson import (
+    ModelDefinition,
+    MetaModel,
+    Entity,
     CuboidEntity,
     GroupEntity,
-    MetaModel,
-    ModelDefinition,
-    Animation,
     AtlasDefinition,
+    FaceEnum,
     FaceTexture,
+    Animation,
+    Channel,
 )
 
 __all__ = [
-    "BaseEntity",
+    "ModelDefinition",
+    "MetaModel",
+    "Entity",
     "CuboidEntity",
     "GroupEntity",
-    "MetaModel",
-    "ModelDefinition",
-    "Animation",
     "AtlasDefinition",
+    "FaceEnum",
     "FaceTexture",
+    "Animation",
+    "Channel",
 ]

@@ -52,8 +52,52 @@ def convert(input_path: str, output_path: str) -> None:
     # Load input file to BlockJSON (our central format)
     block_json = _load_to_blockjson(input_path, input_format)
 
+    # Ensure model has a valid atlas (Texture it if it's missing!)
+    _ensure_textured(block_json)
+
     # Convert from BlockJSON to output format
     _save_from_blockjson(block_json, output_path, output_format)
+
+
+def _ensure_textured(block_json: dict) -> None:
+    """
+    Check if model has a valid atlas, and if not, generate a clay atlas.
+    
+    This handles:
+    1. Python DSL models (which have no textures)
+    2. BBModel/GLTF models that might be untextured
+    """
+    if not block_json:
+        return
+
+    meta = block_json.get("meta", {})
+    atlases = meta.get("atlases", {})
+    
+    # Check if we have a valid 'main' atlas with data
+    has_valid_atlas = False
+    if "main" in atlases:
+        atlas_data = atlases["main"].get("data")
+        if atlas_data and len(atlas_data) > 0:
+            has_valid_atlas = True
+            
+    if not has_valid_atlas:
+        # No texture found! Apply clay atlas.
+        from blocksmith.texturing.clay_atlas import build_clay_atlas_with_compiler
+        
+        # Ensure minimal metadata
+        if "meta" not in block_json:
+            block_json["meta"] = {}
+        
+        # Default texel density if missing
+        if "texel_density" not in block_json["meta"]:
+            block_json["meta"]["texel_density"] = 16
+        
+        # Modify in-place/update
+        updated_json = build_clay_atlas_with_compiler(block_json)
+        block_json.update(updated_json)
+        
+        # Update schema version since we modified it
+        block_json["meta"]["schema_version"] = "3.0"
 
 
 def _detect_format(path: str) -> str:

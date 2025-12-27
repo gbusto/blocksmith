@@ -32,6 +32,7 @@ dependencies = [
     "litellm==1.72.4",
     "tenacity>=8.0.0",  # Required by litellm for retries
     "click>=8.0.0",  # CLI framework
+    "pillow>=10.0.0",  # Image processing for atlases
 ]
 
 [project.optional-dependencies]
@@ -53,6 +54,8 @@ blocksmith = "blocksmith.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["blocksmith*"]
+[tool.setuptools.package-data]
+"blocksmith" = ["**/*.md"]
 
 [tool.black]
 line-length = 100

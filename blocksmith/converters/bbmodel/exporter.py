@@ -103,6 +103,12 @@ def export_bbmodel(
     if isinstance(schema_data, str):
         schema_data = json.loads(schema_data)
     
+    # Strip any extra fields from meta that aren't in the v3 schema
+    # This handles legacy models that may have extra fields like 'generator'
+    if 'meta' in schema_data:
+        allowed_meta_fields = {'schema_version', 'texel_density', 'atlases', 'import_source'}
+        schema_data['meta'] = {k: v for k, v in schema_data['meta'].items() if k in allowed_meta_fields}
+    
     # Validate v3 schema
     try:
         model = ModelDefinition.model_validate(schema_data)
@@ -193,7 +199,7 @@ def export_bbmodel(
                 resolution_h
             ))
         elif isinstance(entity, GroupEntity):
-            groups[entity.id] = _convert_group_to_bbmodel(entity, entity_uuid, texel_density)
+            groups[entity.id] = _convert_group_to_bbmodel(entity, entity_uuid, texel_density, entities_dict)
     
     # Add elements to BBModel
     bbmodel["elements"] = elements
@@ -285,7 +291,7 @@ def _convert_cuboid_to_bbmodel(
     # Per-face UVs from centralized mapper (applies BB flips)
     if atlas_map and cuboid.faces:
         v3_to_bb_face_map = {
-            "front": "south", "back": "north", "left": "west",
+            "front": "north", "back": "south", "left": "west",
             "right": "east", "top": "up", "bottom": "down"
         }
         for v3_face_name, face_texture in cuboid.faces.items():
@@ -297,6 +303,10 @@ def _convert_cuboid_to_bbmodel(
             
             element["faces"][bb_face_name]["uv"] = pixel_uv
             element["faces"][bb_face_name]["texture"] = atlas_map.get(face_texture.atlas_id)
+
+            # Fix Bottom/-Y Rotation (User reported 90 deg CCW offset relative to GLTF)
+            if v3_face_name == "bottom":
+                element["faces"][bb_face_name]["rotation"] = 90
     
     # Add inflate if non-zero
     if inflate_px != 0:
@@ -308,13 +318,15 @@ def _convert_cuboid_to_bbmodel(
 def _convert_group_to_bbmodel(
     group: GroupEntity, 
     entity_uuid: str, 
-    texel_density: float
+    texel_density: float,
+    entities_dict: Dict[str, Union[CuboidEntity, GroupEntity]] = None
 ) -> Dict[str, Any]:
     """Convert v3 GroupEntity to BBModel group node."""
     
-    # Convert pivot back to BBModel origin - no transform needed
-    pivot = group.pivot.copy()
-    origin_px = [coord * texel_density for coord in pivot]
+    # Calculate WORLD pivot by walking up parent hierarchy
+    # BBModel groups need origins in world coordinates!
+    world_pivot = _calculate_world_pivot(group, entities_dict or {})
+    origin_px = [coord * texel_density for coord in world_pivot]
     
     # Convert quaternion back to Euler - no transform needed
     euler_bbmodel = quaternion_to_euler(group.rotation)

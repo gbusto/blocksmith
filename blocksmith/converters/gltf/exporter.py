@@ -166,14 +166,16 @@ def blender_entrypoint() -> None:
                 (bounds_min_b[0], bounds_max_b[1], bounds_max_b[2]),
             ]
             
-            # Define faces (quads) - standard winding order (no X-axis flip)
+            # Define faces (quads) - standard winding order (BL -> BR -> TR -> TL)
+            # This ensures the first edge is Horizontal (matching U) and second is Vertical (matching V)
+            # Preventing the 90-degree rotation/squash effect.
             faces = [
-                (0, 1, 2, 3),  # Bottom
-                (4, 7, 6, 5),  # Top
-                (0, 4, 5, 1),  # Front
-                (2, 6, 7, 3),  # Back
-                (0, 3, 7, 4),  # Left
-                (1, 5, 6, 2),  # Right
+                (0, 3, 2, 1),  # Bottom (Fixed winding: 0,3,2,1 to point -Z)
+                (4, 5, 6, 7),  # Top
+                (0, 1, 5, 4),  # Front
+                (2, 3, 7, 6),  # Back
+                (0, 4, 7, 3),  # Left   (Fixed winding: 0,4,7,3 to point -X)
+                (1, 2, 6, 5),  # Right
             ]
             
             # Create mesh
@@ -188,10 +190,12 @@ def blender_entrypoint() -> None:
             uv_layer = mesh.uv_layers.new(name="UVMap")
             
             # Map v3 face names to Blender's default cube face indices
-            # (This order is consistent for cubes created via from_pydata)
+            # Note: Front/Back swapped to align with Importer expectation (+Y is Front for Importer? No +Y is Back)
+            # Importer expects Back=(0,0,-1) after transform?
+            # Let's trust the Swap Loop analysis: Front->3 (Back Face Geom), Back->2 (Front Face Geom)
             face_map = {
-                'bottom': 0, 'top':    1, 'front':  2,
-                'back':   3, 'left':   4, 'right':  5
+                'bottom': 0, 'top':    1, 'front':  3,
+                'back':   2, 'left':   4, 'right':  5
             }
 
             # Set UVs per face using the centralized uv_mapper

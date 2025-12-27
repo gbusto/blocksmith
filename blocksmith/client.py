@@ -220,7 +220,31 @@ class Blocksmith:
 
     def _dsl_to_json(self, dsl: str) -> dict:
         """Convert Python DSL to BlockJSON schema"""
-        return import_python(dsl)
+        # 1. Convert DSL to basic v3 JSON
+        v3_json = import_python(dsl)
+        
+        if not v3_json:
+            # Import failed, return empty or raise error?
+            # Existing behavior of import_python is to return {} on error/log it.
+            # We should probably pass it through or log a warning, but definitely not try to process it.
+            return {}
+
+        # 2. Generate Clay Atlas (Textures & UVs)
+        # Ensure metadata exists
+        if "meta" not in v3_json:
+            v3_json["meta"] = {}
+        
+        v3_json["meta"]["texel_density"] = 16
+        
+        # Build the atlas (this modifies v3_json in place or returns new dict)
+        # It generates the 'main' atlas and assigns UVs to all faces
+        from blocksmith.texturing.clay_atlas import build_clay_atlas_with_compiler
+        v3_json = build_clay_atlas_with_compiler(v3_json)
+
+        # 3. Final Metadata Updates
+        v3_json["meta"]["schema_version"] = "3.0"
+        
+        return v3_json
 
     def _json_to_glb(self, json_schema: dict) -> bytes:
         """Convert BlockJSON schema to GLB format (via Blender)"""

@@ -17,8 +17,10 @@ from typing import Dict, Tuple, List, Any
 V3_FACE_ORDER = ["front", "back", "left", "right", "top", "bottom"]
 
 # Flips needed to match Blockbench's internal face orientation vs. v3's
-BBMODEL_FLIP_H = {"front", "back", "left", "right"}
-BBMODEL_FLIP_V = {"top", "bottom"}
+# User reported textures are Upright but Mirrored.
+# This implies FLIP_V was correct (fixed upside down), but FLIP_H caused mirroring.
+BBMODEL_FLIP_H = {"left"} # West/-X
+BBMODEL_FLIP_V = {"front", "back", "left", "right", "top", "bottom"}
 
 # ===================================================================
 # Main Conversion Functions

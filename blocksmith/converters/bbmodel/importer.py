@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 
 # Import BlockJSON schema
+# Import BlockJSON schema
 from blocksmith.schema.blockjson import (
     ModelDefinition, MetaModel, AtlasDefinition,
     CuboidEntity, GroupEntity, FaceTexture, FaceEnum
@@ -91,11 +92,19 @@ def import_bbmodel(
         logger.warning(f"Invalid texel density {texel_density}, using default {DEFAULT_TEXEL_DENSITY}")
         texel_density = DEFAULT_TEXEL_DENSITY
     
+    # Extract texture from BBModel if available
+    atlas = _extract_texture_atlas(bbmodel_data)
+    
+    # Get texture resolution for UV normalization
+    texture_resolution = bbmodel_data.get("resolution", {"width": 128, "height": 128})
+    texture_width = texture_resolution.get("width", 128)
+    texture_height = texture_resolution.get("height", 128)
+    
     # Create meta
     meta = MetaModel(
         schema_version="3.0",
         texel_density=texel_density,
-        atlases={"main": _create_dummy_atlas()},  # Dummy for Phase 1
+        atlases={"main": atlas},
         import_source="bbmodel"
     )
     
@@ -104,11 +113,22 @@ def import_bbmodel(
     uuid_to_id = {}  # Map BBModel UUIDs to v3 IDs
     entity_parents = {}  # Track parent relationships from outliner
     
+    # Build a map of group UUID → group data from the 'groups' array
+    # Blockbench stores full group data (including rotation) in 'groups' array,
+    # while 'outliner' only contains hierarchy info when file is saved
+    groups_data_map: Dict[str, Dict] = {}
+    for group_data in bbmodel_data.get("groups", []):
+        if "uuid" in group_data:
+            groups_data_map[group_data["uuid"]] = group_data
+    
+    if groups_data_map:
+        logger.debug(f"Found {len(groups_data_map)} groups in 'groups' array with rotation data")
+    
     # First pass: process outliner to build hierarchy and collect group info
     group_transforms = {}  # Store group transforms for later use
     if bbmodel_data.get("outliner"):
         _build_hierarchy_map(bbmodel_data["outliner"], entity_parents)
-        _collect_group_transforms(bbmodel_data["outliner"], group_transforms, texel_density)
+        _collect_group_transforms(bbmodel_data["outliner"], group_transforms, texel_density, groups_data_map)
     
     # Process elements (cuboids)
     for i, element in enumerate(bbmodel_data.get("elements", [])):
@@ -122,33 +142,31 @@ def import_bbmodel(
         # Get parent info
         parent_id = entity_parents.get(element["uuid"])
         
-        # CRITICAL: BBModel stores cubes in WORLD coordinates
-        # We need to convert them to LOCAL coordinates relative to their parent group
+        # CRITICAL: BBModel stores cubes in WORLD coordinates (pixels)
+        # v3 schema expects LOCAL coordinates relative to parent
         
-        # Get element's world coordinates
-        element_origin_world = element.get("origin", [(element["from"][i] + element["to"][i]) / 2 for i in range(3)])
+        # Get element's world coordinates (in pixels)
+        element_origin_world = element.get("origin", [(element["from"][j] + element["to"][j]) / 2 for j in range(3)])
         element_from_world = element["from"]
         element_to_world = element["to"]
         
-        # Convert to v3 units
+        # Convert to v3 units (divide by texel_density)
         origin_world_v3 = [coord / texel_density for coord in element_origin_world]
         from_world_v3 = [coord / texel_density for coord in element_from_world]
         to_world_v3 = [coord / texel_density for coord in element_to_world]
         
-        # No coordinate transforms needed - both BBModel and v3 use same conventions
+        # Calculate from/to relative to the element's own origin/pivot
+        # This is ALWAYS relative to the element's pivot, not the parent
+        from_local = [from_world_v3[j] - origin_world_v3[j] for j in range(3)]
+        to_local = [to_world_v3[j] - origin_world_v3[j] for j in range(3)]
         
-        # Calculate from/to relative to the element's own pivot
-        # This is ALWAYS relative to the element's center, not the parent
-        from_local = [from_world_v3[i] - origin_world_v3[i] for i in range(3)]
-        to_local = [to_world_v3[i] - origin_world_v3[i] for i in range(3)]
-        
-        # Calculate pivot position
+        # Convert world pivot to LOCAL pivot (relative to parent)
+        # v3 schema: pivot is LOCAL translation in parent space
         if parent_id and parent_id in group_transforms:
-            # Element has a parent - pivot is relative to parent's position
-            parent_pivot = group_transforms[parent_id]["pivot"]
-            pivot = [origin_world_v3[i] - parent_pivot[i] for i in range(3)]
+            parent_world_pivot = group_transforms[parent_id]["pivot"]
+            pivot = [origin_world_v3[j] - parent_world_pivot[j] for j in range(3)]
         else:
-            # No parent - pivot is world position
+            # No parent - pivot is world position (root level)
             pivot = origin_world_v3
         
         # Set from/to coords (ensure from < to)
@@ -171,11 +189,8 @@ def import_bbmodel(
         inflate_in_units = inflate / texel_density
         scale_factors = [1.0, 1.0, 1.0]  # BBModel doesn't use scale transforms
         
-        # Create dummy faces for Phase 1 (geometry only)
-        faces = {
-            face: FaceTexture(atlas_id="main", uv=[0, 0, 1, 1])
-            for face in FaceEnum
-        }
+        # Extract face UVs from BBModel (normalized to 0-1 range)
+        faces = _extract_face_uvs(element, texture_width, texture_height)
         
         cuboid_data = {
             "id": entity_id,
@@ -209,6 +224,8 @@ def import_bbmodel(
             uuid_to_id, 
             texel_density,
             options,
+            groups_data_map,
+            group_transforms,
             parent_id=None
         )
     
@@ -244,6 +261,104 @@ def _create_dummy_atlas() -> AtlasDefinition:
     )
 
 
+def _extract_texture_atlas(bbmodel_data: Dict) -> AtlasDefinition:
+    """
+    Extract texture atlas from BBModel.
+    
+    BBModel embeds textures as base64 data URIs in the 'textures' array.
+    Returns the first texture found, or a dummy atlas if none.
+    """
+    textures = bbmodel_data.get("textures", [])
+    
+    if textures:
+        # Use the first texture
+        tex = textures[0]
+        source = tex.get("source", "")
+        
+        # BBModel stores as data URI: "data:image/png;base64,..."
+        if source.startswith("data:"):
+            # Extract mime type and base64 data
+            parts = source.split(",", 1)
+            if len(parts) == 2:
+                header = parts[0]  # e.g., "data:image/png;base64"
+                data_b64 = parts[1]
+                
+                # Parse mime type
+                mime = "image/png"  # Default
+                if "image/png" in header:
+                    mime = "image/png"
+                elif "image/jpeg" in header:
+                    mime = "image/jpeg"
+                
+                # Get resolution from texture or bbmodel resolution
+                width = tex.get("width") or tex.get("uv_width", 128)
+                height = tex.get("height") or tex.get("uv_height", 128)
+                
+                logger.debug(f"Extracted texture: {width}x{height}, {len(data_b64)} bytes")
+                
+                return AtlasDefinition(
+                    data=data_b64,
+                    mime=mime,
+                    resolution=[width, height]
+                )
+    
+    # No texture found - return dummy
+    logger.warning("No texture found in BBModel, using dummy atlas")
+    return _create_dummy_atlas()
+
+
+def _extract_face_uvs(element: Dict, texture_width: int, texture_height: int) -> Dict[FaceEnum, FaceTexture]:
+    """
+    Extract and normalize UV coordinates from BBModel element faces.
+    
+    BBModel stores UVs in pixel coordinates, we normalize to 0-1 range.
+    """
+    faces = {}
+    
+    # Mapping from BBModel face names to v3 FaceEnum
+    face_mapping = {
+        "north": FaceEnum.front,  # BBModel north = front (negative Z face)
+        "south": FaceEnum.back,   # BBModel south = back (positive Z face)
+        "east": FaceEnum.right,   # BBModel east = right (positive X face)
+        "west": FaceEnum.left,    # BBModel west = left (negative X face)
+        "up": FaceEnum.top,
+        "down": FaceEnum.bottom
+    }
+    
+    bbmodel_faces = element.get("faces", {})
+    
+    for bbmodel_name, v3_face in face_mapping.items():
+        face_data = bbmodel_faces.get(bbmodel_name, {})
+        uv = face_data.get("uv", [0, 0, 16, 16])  # Default to full face
+        
+        # Normalize UV from pixel coords to 0-1 range
+        # BBModel UV: [u1, v1, u2, v2] in pixels
+        u1 = uv[0] / texture_width
+        v1 = uv[1] / texture_height
+        u2 = uv[2] / texture_width
+        v2 = uv[3] / texture_height
+        
+        # INVERSE FLIPS Logic
+        # If exporting applied a flip, importing must un-flip.
+        # FLIP_H (Swap U): V3(u1,u2) -> BB(u2,u1) => Import BB(u1,u2) is actually (u2,u1)
+        # FLIP_V (Swap V): V3(v1,v2) -> BB(v2,v1) => Import BB(v1,v2) is actually (v2,v1)
+        
+        # West is FLIP_H + FLIP_V
+        if v3_face == FaceEnum.left: # West
+             u1, u2 = u2, u1
+             v1, v2 = v2, v1
+        # All others are FLIP_V only
+        else:
+             v1, v2 = v2, v1
+
+        faces[v3_face] = FaceTexture(
+            atlas_id="main",
+            uv=[u1, v1, u2, v2]
+        )
+    
+    return faces
+
+
 def _build_hierarchy_map(
     nodes: List[Union[str, Dict]], 
     entity_parents: Dict[str, str],
@@ -272,6 +387,7 @@ def _collect_group_transforms(
     nodes: List[Union[str, Dict]], 
     group_transforms: Dict[str, Dict],
     texel_density: float,
+    groups_data_map: Dict[str, Dict] = None,
     parent_pivot: Optional[List[float]] = None
 ) -> None:
     """
@@ -281,24 +397,36 @@ def _collect_group_transforms(
         nodes: BBModel outliner nodes (strings for elements, dicts for groups)
         group_transforms: Output mapping of UUID -> transform info
         texel_density: Pixels per block for coordinate conversion
+        groups_data_map: Mapping of group UUID -> full group data (from 'groups' array)
         parent_pivot: Parent group's pivot in v3 coordinates (for nested groups)
     """
+    if groups_data_map is None:
+        groups_data_map = {}
+        
     for node in nodes:
         if isinstance(node, dict):  # Group node
-            # Convert group origin to v3 coordinates
-            origin = node.get("origin", [0, 0, 0])
+            group_uuid = node.get("uuid")
+            
+            # Look up full group data from 'groups' array (has rotation when Blockbench saves)
+            full_group_data = groups_data_map.get(group_uuid, {})
+            
+            # Get origin - prefer 'groups' array, fall back to outliner node
+            origin = full_group_data.get("origin") or node.get("origin", [0, 0, 0])
             pivot_v3 = [coord / texel_density for coord in origin]
             # Direct conversion - coordinate systems match
             
+            # Get rotation - prefer 'groups' array (Blockbench saves rotation there!)
+            rotation = full_group_data.get("rotation") or node.get("rotation", [0, 0, 0])
+            
             # Store the world pivot for this group
-            group_transforms[node["uuid"]] = {
+            group_transforms[group_uuid] = {
                 "pivot": pivot_v3,
-                "rotation": node.get("rotation", [0, 0, 0])
+                "rotation": rotation
             }
             
             # Process children recursively
             if "children" in node:
-                _collect_group_transforms(node["children"], group_transforms, texel_density, pivot_v3)
+                _collect_group_transforms(node["children"], group_transforms, texel_density, groups_data_map, pivot_v3)
 
 
 def _create_groups_from_outliner(
@@ -307,6 +435,8 @@ def _create_groups_from_outliner(
     uuid_to_id: Dict[str, str],
     texel_density: float,
     options: Dict[str, Any],
+    groups_data_map: Dict[str, Dict] = None,
+    group_transforms: Dict[str, Dict] = None,
     parent_id: Optional[str] = None
 ) -> None:
     """
@@ -318,19 +448,38 @@ def _create_groups_from_outliner(
         uuid_to_id: Mapping of BBModel UUID -> v3 entity ID
         texel_density: Pixels per block for coordinate conversion
         options: Import options (geometry_only, etc.)
+        groups_data_map: Mapping of group UUID -> full group data (from 'groups' array)
+        group_transforms: Mapping of group UUID -> world pivot/rotation
         parent_id: Parent group ID for nested groups
     """
+    if groups_data_map is None:
+        groups_data_map = {}
+    if group_transforms is None:
+        group_transforms = {}
+        
     for node in nodes:
         if isinstance(node, dict):  # Only process group nodes
             # Group node - use UUID as ID
-            group_id = node["uuid"]
+            group_id = node.get("uuid")
             
-            # Convert group position/rotation
-            origin = node.get("origin", [0, 0, 0])
-            pivot = [coord / texel_density for coord in origin]
-            # No Z flip needed - both use +Z=North
+            # Look up full group data from 'groups' array (has rotation when Blockbench saves)
+            full_group_data = groups_data_map.get(group_id, {})
             
-            rotation_euler = node.get("rotation", [0, 0, 0])
+            # Get origin (world coordinates) - prefer 'groups' array, fall back to outliner node
+            origin = full_group_data.get("origin") or node.get("origin", [0, 0, 0])
+            world_pivot = [coord / texel_density for coord in origin]
+            
+            # Convert world pivot to LOCAL pivot (relative to parent)
+            # v3 schema: pivot is LOCAL translation in parent space
+            if parent_id and parent_id in group_transforms:
+                parent_world_pivot = group_transforms[parent_id]["pivot"]
+                pivot = [world_pivot[j] - parent_world_pivot[j] for j in range(3)]
+            else:
+                # No parent - pivot is world position (root level)
+                pivot = world_pivot
+            
+            # Get rotation - prefer 'groups' array (Blockbench saves rotation there!)
+            rotation_euler = full_group_data.get("rotation") or node.get("rotation", [0, 0, 0])
             # Direct conversion - no negation needed since coordinate systems match
             rotation_quat = euler_to_quaternion(rotation_euler)
             
@@ -340,13 +489,13 @@ def _create_groups_from_outliner(
                 # UUID is the only thing we can't derive from v3 data
                 metadata = {
                     "bbmodel": {
-                        "uuid": node["uuid"]
+                        "uuid": group_id
                     }
                 }
             
             group = GroupEntity(
                 id=group_id,
-                label=node.get("name", group_id),
+                label=full_group_data.get("name") or node.get("name", group_id),
                 parent=parent_id,
                 pivot=pivot,
                 rotation=rotation_quat,
@@ -363,5 +512,7 @@ def _create_groups_from_outliner(
                     uuid_to_id, 
                     texel_density,
                     options,
+                    groups_data_map,
+                    group_transforms,
                     parent_id=group_id
                 )

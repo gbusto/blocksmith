@@ -40,7 +40,7 @@ def blender_entrypoint() -> None:
 
     # Now import the modules after path is set up (avoid models.py which needs pydantic)
     try:
-        from engines.core.v3.gltf.geometry_filter import is_non_visual_geometry
+        from blocksmith.converters.gltf.geometry_filter import is_non_visual_geometry
     except ImportError:
         # Fallback: simple non-visual geometry detection
         def is_non_visual_geometry(name, entity_data=None):
@@ -48,7 +48,7 @@ def blender_entrypoint() -> None:
             return any(keyword in name.lower() for keyword in keywords)
     
     try:
-        from engines.core.v3.coordinate_utils import (
+        from blocksmith.converters.coordinate_utils import (
             transform_position_blender_to_v3,
             transform_quaternion_blender_to_v3,
             normalize_quaternion,
@@ -240,11 +240,14 @@ def blender_entrypoint() -> None:
                     detected_faces.add(face_key)
                     if uv_layer:
                         uvs = [uv_layer[li].uv for li in poly.loop_indices]
-                        u_min, v_min = min(uv.x for uv in uvs), min(uv.y for uv in uvs)
-                        u_max, v_max = max(uv.x for uv in uvs), max(uv.y for uv in uvs)
+                        # V-Flip: 1.0 - v
+                        # u min/max is standard, v min/max needs inversion
+                        u_min, u_max = min(uv.x for uv in uvs), max(uv.x for uv in uvs)
+                        v_min_gltf, v_max_gltf = min(uv.y for uv in uvs), max(uv.y for uv in uvs)
+                        
                         faces[face_key] = {
                             "atlas_id": "main",
-                            "uv": [u_min, v_min, u_max, v_max]
+                            "uv": [u_min, 1.0 - v_max_gltf, u_max, 1.0 - v_min_gltf]
                         }
 
             # Check mesh type and log accordingly
