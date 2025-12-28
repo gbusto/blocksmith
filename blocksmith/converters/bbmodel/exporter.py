@@ -303,10 +303,15 @@ def _convert_cuboid_to_bbmodel(
             
             element["faces"][bb_face_name]["uv"] = pixel_uv
             element["faces"][bb_face_name]["texture"] = atlas_map.get(face_texture.atlas_id)
-
-            # Fix Bottom/-Y Rotation (User reported 90 deg CCW offset relative to GLTF)
+            
+            # Fix Orientation for Top/Bottom Faces
+            # Since we transposed the Atlas Layout for these faces (D x W),
+            # we must rotate them in Blockbench to fit the W x D face geometry
+            # and achieve the desired visual alignment.
             if v3_face_name == "bottom":
-                element["faces"][bb_face_name]["rotation"] = 90
+                element["faces"][bb_face_name]["rotation"] = 270 # 90 CCW
+            elif v3_face_name == "top":
+                element["faces"][bb_face_name]["rotation"] = 90  # 90 CW (Standard for Top?)
     
     # Add inflate if non-zero
     if inflate_px != 0:

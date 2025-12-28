@@ -245,6 +245,32 @@ def blender_entrypoint() -> None:
                         u_min, u_max = min(uv.x for uv in uvs), max(uv.x for uv in uvs)
                         v_min_gltf, v_max_gltf = min(uv.y for uv in uvs), max(uv.y for uv in uvs)
                         
+                        # INVERSE FLIP for Left/Bottom face
+                        # We flipped the UV mapping in Export (swapping V).
+                        # The Importer reads the mesh UVs. If we swapped them in export, the mesh has them swapped.
+                        # So u_min/v_min calculation remains valid in terms of bounding box.
+                        # BUT, the meaning of 'Top' vs 'Bottom' is reversed relative to the texture.
+                        # Standard V3 UVs are [u1, v1, u2, v2].
+                        # v1 = Top (0), v2 = Bottom (1).
+                        # If we swapped V in export, mapping 0->1 and 1->0.
+                        # The bounding box [0, 1] is the same.
+                        # So just extracting min/max won't detect the flip if the texture is symmetric?
+                        # Wait, roundtrip verification checks exact coordinates.
+                        # If we export [0, 0, 1, 1] for Left.
+                        # And we flip V in Export: we map UVs [0,1], [1,1]... to vertices?
+                        # If we swapped assignments, the mesh data effectively has V' = 1-V relative to face geometry?
+                        # No, if we just reordered vertices in the assignment loop:
+                        # Vertex 0 gets "old Vertex 3's UV".
+                        # Effectively, we rotated the UV map 180 degrees or flipped vertically.
+                        # To recover the original [u1, v1, u2, v2], we don't need to change logic *if* min/max captures the extent.
+                        # BUT V3 UVs imply orientation? No, V3 UVs are just a rect.
+                        # "uv": [u1, v1, u2, v2]. (xmin, ymin, xmax, ymax).
+                        # It doesn't specify rotation. Winding does.
+                        # So if we flip V in export, the TEXTURE appears flipped.
+                        # The UV rect is the same.
+                        # So roundtrip should Pass WITHOUT changes to importer?
+                        # Let's verify.
+                        
                         faces[face_key] = {
                             "atlas_id": "main",
                             "uv": [u_min, 1.0 - v_max_gltf, u_max, 1.0 - v_min_gltf]

@@ -11,8 +11,8 @@ from io import BytesIO
 from typing import List, Tuple, Dict, Any
 from PIL import Image, ImageDraw
 
-from engines.core.v3.models import CuboidEntity
-from engines.core.v3.smart_uv_packer import pack_rectangles
+from blocksmith.schema.blockjson import CuboidEntity
+from blocksmith.texturing.smart_uv_packer import pack_rectangles
 
 
 def generate_debug_atlas(entities: List[Any], texture_size: int = 512) -> Dict[str, Any]:

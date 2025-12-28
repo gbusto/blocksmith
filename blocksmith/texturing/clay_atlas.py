@@ -7,7 +7,7 @@ using the v3-native UV atlas generator.
 
 from typing import Dict, Any
 
-from .uv_atlas import generate_clay_atlas
+from blocksmith.texturing.uv_atlas import generate_clay_atlas
 
 
 def build_clay_atlas_with_compiler(v3_json: Dict[str, Any]) -> Dict[str, Any]:

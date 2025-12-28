@@ -89,28 +89,58 @@ def get_box_uv_face_rects(
     Returns:
         Dict mapping face name to (x1, y1, x2, y2) pixel coordinates
     """
+    # Transposed Top/Bottom Layout:
+    # To allow Blockbench to rotate these faces 90deg without stretching,
+    # distinct W/D dimensions must be swapped on the atlas.
+    # New Layout: Top/Bot are D wide x W tall.
+    # Row 0 Height: w_px (was d_px)
+    
     # Row 0: Top (+Y) and Bottom (-Y)
-    top_x = strip_x + d_px
+    # Positions x:
+    # Top starts at strip_x (aligned with Left? No, just pack them).
+    # Let's align them with the layout logic.
+    # Strip Width = 2*(w+d).
+    # Top (D wide) | Bot (D wide). 
+    # Row 0 y = strip_y.
+    
+    top_x = strip_x             # Top above Left
     top_y = strip_y
     
+    bottom_x = strip_x + d_px + w_px # Bottom above Right? Right is D wide?
+    # Diagram: L(d) | Bk(w) | R(d) | Fr(w)
+    # We want Top above ? 
+    # If Top is D wide. Left is D wide. Match!
+    # Bottom: D wide. Right is D wide. 
+    # Right starts at strip_x + d + w.
     bottom_x = strip_x + d_px + w_px
     bottom_y = strip_y
     
     # Row 1: Left (-X), Front (+Z), Right (+X), Back (-Z)
-    row_y = strip_y + d_px
+    row_y = strip_y + w_px # Row 0 is now W tall
     
     left_x = strip_x
-    front_x = strip_x + d_px
-    right_x = strip_x + d_px + w_px
-    back_x = strip_x + d_px + w_px + d_px
+    left_y = row_y
+    
+    # Front (W wide) -> Standard layout has Front at end?
+    # Diagram: L | Bk | R | Fr
+    # L(d), Bk(w), R(d), Fr(w)
+    
+    back_x = left_x + d_px
+    back_y = row_y
+    
+    right_x = back_x + w_px
+    right_y = row_y
+    
+    front_x = right_x + d_px
+    front_y = row_y
     
     return {
-        'top':    (top_x, top_y, top_x + w_px, top_y + d_px),
-        'bottom': (bottom_x, bottom_y, bottom_x + w_px, bottom_y + d_px),
-        'left':   (left_x, row_y, left_x + d_px, row_y + h_px),
-        'front':  (front_x, row_y, front_x + w_px, row_y + h_px),
-        'right':  (right_x, row_y, right_x + d_px, row_y + h_px),
-        'back':   (back_x, row_y, back_x + w_px, row_y + h_px),
+        "top":    (top_x, top_y, top_x + d_px, top_y + w_px),       # D x W
+        "bottom": (bottom_x, bottom_y, bottom_x + d_px, bottom_y + w_px), # D x W
+        "left":   (left_x, left_y, left_x + d_px, left_y + h_px),   # D x H
+        "back":   (back_x, back_y, back_x + w_px, back_y + h_px),   # W x H
+        "right":  (right_x, right_y, right_x + d_px, right_y + h_px), # D x H
+        "front":  (front_x, front_y, front_x + w_px, front_y + h_px)  # W x H
     }
 
 
@@ -203,8 +233,10 @@ def generate_clay_atlas(
         
         w_px, h_px, d_px = calculate_cuboid_pixels(from_coords, to_coords, texel_density)
         
+        # Strip width: 2 * (w + d)
+        # Strip height: h + w (Transposed Top/Bottom row uses w as height)
         strip_w = 2 * (w_px + d_px)
-        strip_h = h_px + d_px
+        strip_h = h_px + w_px
         
         strips.append(CuboidStrip(
             entity_id=entity['id'],

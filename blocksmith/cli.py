@@ -5,7 +5,7 @@ BlockSmith CLI - Command-line interface for generating block models
 import click
 import sys
 from pathlib import Path
-from blocksmith import Blocksmith
+from blocksmith.client import Blocksmith
 from blocksmith.converters.convert import convert as convert_model
 from blocksmith.llm.exceptions import LLMAPIError, LLMServiceError, LLMTimeoutError
 

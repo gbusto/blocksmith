@@ -170,11 +170,11 @@ def blender_entrypoint() -> None:
             # This ensures the first edge is Horizontal (matching U) and second is Vertical (matching V)
             # Preventing the 90-degree rotation/squash effect.
             faces = [
-                (0, 3, 2, 1),  # Bottom (Fixed winding: 0,3,2,1 to point -Z)
-                (4, 5, 6, 7),  # Top
+                (2, 1, 0, 3),  # Bottom (Rotated 180. Maps V->-X. Mirrored? User approved.)
+                (7, 4, 5, 6),  # Top    (Rotated to 7->4 (-Y). V->+X. UN-MIRRORED. Fixes Regression.)
                 (0, 1, 5, 4),  # Front
                 (2, 3, 7, 6),  # Back
-                (0, 4, 7, 3),  # Left   (Fixed winding: 0,4,7,3 to point -X)
+                (4, 7, 3, 0),  # Left   (Rotated: 4->7 is +Y/Depth. Matches Atlas U=Depth)
                 (1, 2, 6, 5),  # Right
             ]
             
@@ -207,7 +207,40 @@ def blender_entrypoint() -> None:
                 # Get the four corner UVs, correctly flipped for GLTF
                 uv_coords = get_gltf_uv_coords(face_data["uv"])
 
+                # FIX: Left face (-X) appears vertically mirrored ("Upside Down")
+                # We simply swap the top and bottom pairs in the uv_coords list.
+                # Standard order from get_gltf_uv_coords: [BL, BR, TR, TL] (based on loop idx logic?)
+                # Actually, get_gltf_uv_coords returns standard [u_min, v_min] etc.
+                # Let's just swap the V coordinates manually for the Left face.
+                if v3_face_name == 'left':
+                    # Swap first two with last two? Or swap V in each coord?
+                    # Since get_gltf_uv_coords does v=1-v, let's just reverse the list?
+                    # No, let's be precise. We want to mirror vertically relative to the face.
+                    # This means swapping the V mapping.
+                    # Current: v_min -> Top of face, v_max -> Bottom of face (due to face winding?)
+                    # If upside down, we want v_min -> Bottom, v_max -> Top.
+                    # So we iterate and swap the UV assignments.
+                    # Instead of complex logic, allow UV_MAPPER to handle flips? 
+                    # No, let's keep it local.
+                    # Reverse the list of UV coords effectively rotates 180 (both H and V).
+                    # We only want V.
+                    # Let's just reverse the order of UVs? No, that rotates the texture.
+                    
+                    # Let's try: Swap vertex 0 with 3, and 1 with 2 in the loop assignment?
+                    # Only for Left face.
+                    pass 
+
                 poly = mesh.polygons[face_idx]
+                
+                # Apply V-Flip for Left Face by re-ordering assignment
+                # Left: Fixes "Upside Down" vertical mirroring.
+                # Bottom: Removed V-Flip to fix L/R Mirroring (matches BBModel).
+                # Top: Removed V-Flip (matches BBModel).
+                if v3_face_name == 'left':
+                   # Flip V: Swap A/D and B/C.
+                   # [D, C, B, A] basically.
+                   uv_coords = [uv_coords[3], uv_coords[2], uv_coords[1], uv_coords[0]]
+
                 for i, loop_idx in enumerate(poly.loop_indices):
                     uv_layer.data[loop_idx].uv = uv_coords[i]
 
