@@ -1,4 +1,4 @@
-# BlockSmith (early testing)
+# BlockSmith
 
 [![Tests](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml/badge.svg)](https://github.com/gbusto/blocksmith/actions/workflows/tests.yml)
 
