@@ -24,8 +24,13 @@ BlockSmith is a powerful Python library for generating block-style 3D models tha
 ```bash
 # Text to 3D model
 blocksmith generate "a castle" -o castle.glb
+```
 
-# Image to 3D model (turn photos into block art!)
+![Castle Example](castle-example-model.jpg)
+> **Tip:** You can view your generated GLB/GLTF files for free at [sandbox.babylonjs.com](https://sandbox.babylonjs.com/).
+
+```bash
+# Image to 3D model
 blocksmith generate "blocky version" --image photo.jpg -o model.glb
 ```
 

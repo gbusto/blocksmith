@@ -111,6 +111,23 @@ Run it:
 python test.py
 ```
 
+## Running Tests
+
+BlockSmith has a comprehensive test suite for validating converters and UV mapping.
+
+**Run the full suite:**
+```bash
+pytest
+```
+
+**Run specific UV roundtrip verification (Critical for Converters):**
+This test verifies that models can be converted between formats (V3 -> GLTF -> BBModel -> V3) without losing UV data or orientation.
+
+```bash
+python3 tests/test_uv_roundtrip.py
+```
+
+
 ## Project Structure
 
 ```
