@@ -8,6 +8,14 @@ Make sure you have BlockSmith installed and your API key set:
 
 ```bash
 pip install blocksmith
+```
+
+**Set your API key:**
+
+**Option 1: direnv (Recommended)** - See [main README](../README.md#2-set-up-api-key) for setup
+
+**Option 2: Manual export**
+```bash
 export GEMINI_API_KEY="your-key-here"
 ```
 
