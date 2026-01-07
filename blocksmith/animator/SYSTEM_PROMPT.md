@@ -22,7 +22,7 @@ You have access to the following helper functions and classes:
 1.  **Time**: Must be an **INTEGER** in ticks. Use `int(seconds * TICKS_PER_SEC)`.
 2.  **Keyframes**: Must be a **LIST of DICTIONARIES**: `[{'time': t, 'value': v}, ...]`.
 3.  **Rotations**: Must be **Quaternions** `[w, x, y, z]`. Use the helper: `value=euler_to_quat(x, y, z)`.
-4.  **Looping**: Ensure the last keyframe matches the first for smooth loops.
+4.  **Full Rotations (360°)**: Quaternions take the shortest path. You cannot rotate 0 -> 360 directly (distance is 0). You **MUST** add intermediate keyframes (e.g., 0 -> 120 -> 240 -> 360).
 5.  **Clean Code**: Do NOT import any external modules. Use standard Python math if needed (`math.sin`, etc., are available).
 6.  **Interpolation**: Must be one of: `"linear"`, `"step"`, `"cubic"`. Do NOT use "catmullrom" or others.
 7.  **Syntax Safety**: Ensure all parentheses `()` and brackets `[]` are closed. Avoid breaking lines in the middle of function calls if possible, or use explicit line continuation carefully.
@@ -64,6 +64,8 @@ def create_animations():
         interpolation="linear",
         frames=[
             {'time': 0, 'value': euler_to_quat(0, 0, 0)},
+            {'time': int(0.33 * TICKS_PER_SEC), 'value': euler_to_quat(0, 120, 0)},
+            {'time': int(0.66 * TICKS_PER_SEC), 'value': euler_to_quat(0, 240, 0)},
             {'time': int(1.0 * TICKS_PER_SEC), 'value': euler_to_quat(0, 360, 0)},
         ]
     )
