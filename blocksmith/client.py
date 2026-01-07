@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from blocksmith.generator.engine import ModelGenerator
 from blocksmith.converters import import_python, export_glb, export_gltf, export_bbmodel
 from blocksmith.llm.client import TokenUsage
-from blocksmith.generator.prompts import ANIMATION_SYSTEM_PROMPT
+from blocksmith.animator.prompts import ANIMATION_SYSTEM_PROMPT
 
 
 @dataclass

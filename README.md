@@ -480,6 +480,11 @@ bs.generate("a tower").save("tower.glb")
    pip list | grep blocksmith  # Should show blocksmith
    ```
 
+### Animation/Linking Issues
+
+For deep dives into the animation system, known issues, and "clean room" merge logic, please consult the [Engineering Notes](docs/ENGINEERING_NOTES.md).
+
+
 ## API Reference
 
 ### `Blocksmith`
@@ -555,27 +560,9 @@ This design allows for:
 This is an alpha release focused on core features. Current limitations:
 
 - ⚠️ **Requires Blender** for GLB/GLTF export only (BBModel, JSON, Python DSL work without Blender)
-- ❌ No animation support yet (coming in v0.2)
 - ✅ Geometry generation works great!
 - ✅ CLI, SDK, image support, and format conversion all working!
 
-## Roadmap
-
-**v0.1 (Current)**
-- ✅ Core model generation
-- ✅ Multi-format export (GLB, GLTF, BBModel, JSON, Python DSL)
-- ✅ Image-based generation (reference images)
-- ✅ CLI tool with generate and convert commands
-- ✅ Session statistics and cost tracking
-- ✅ Format conversion API
-
-**v0.2 (Planned)**
-**v0.2 (Planned)**
-- [x] Animation support (Basic)
-- [ ] Blockbench plugin
-- [ ] Web UI
-
-## Contact
 
 Feel free to email me at blocksmithai.app @ gmail[.]com, or [reach out on X](https://x.com/gabebusto)
 
