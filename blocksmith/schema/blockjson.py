@@ -222,7 +222,7 @@ class Animation(BaseModel):
     A single animation clip containing channels.
     """
     name: str = Field(..., description="Animation name (e.g., 'walk').")
-    duration: float = Field(..., description="Total duration in seconds (or ticks).")
+    duration: int = Field(..., description="Total duration in ticks/frames.")
     loop_mode: Optional[Literal['once', 'repeat', 'pingpong']] = Field('repeat', description="Playback mode.")
     channels: List[Channel] = Field(..., description="Channels in this animation.")
 

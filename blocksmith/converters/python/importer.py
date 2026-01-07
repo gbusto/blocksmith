@@ -158,8 +158,16 @@ class PythonExecutor:
                 'loop_mode': loop_mode
             }
 
-        def channel(target_id, property, frames, interpolation='linear', metadata=None, **kwargs):
-            """Create an animation channel."""
+        def channel(target_id, property, frames=None, kf=None, interpolation='linear', metadata=None, **kwargs):
+            """
+            Create an animation channel.
+            Args:
+                frames: List of frames (preferred)
+                kf: Alias for frames (used in some prompts)
+            """
+            # Handle alias
+            if frames is None and kf is not None:
+                frames = kf
             # Handle frames input: Dict[int, val] or List[Dict]
             processed_frames = []
             
@@ -208,7 +216,10 @@ class PythonExecutor:
                     
                     # Convert seconds to ticks
                     TICKS_PER_SEC = self.safe_globals.get('TICKS_PER_SEC', 24)
-                    time_ticks = int(round(time * TICKS_PER_SEC))
+                    if isinstance(time, float):
+                        time_ticks = int(round(time * TICKS_PER_SEC))
+                    else:
+                        time_ticks = int(time)
                     
                     processed_frames.append({'time': time_ticks, 'value': val})
             else:
