@@ -95,8 +95,22 @@ def create_animations():
     -   Ensure moving parts (like a pump shotgun slide) do not clip into other geometry. Calculate positions carefully based on object size.
 4.  **Pivots**:
     -   If a part rotates weirdly (e.g., around its center instead of a joint), it likely lacks a Group with a proper pivot. Ideally, request a model update, but for now, animate what you have.
+5.  **Timing & Speed**:
+    -   **Avoid Hyper-Speed**: A full 360-degree spin should generally take **2.0 to 4.0 seconds**. 1.0 second is usually too fast and looks "spastic".
+    -   **Start Immediately**: Always have a keyframe at `time: 0` unless a delay is explicitly requested.
+    -   **Smoothness**: Use `cubic` interpolation for organic movements. Use `linear` for mechanical spins.
 
----
+    -   **Smoothness**: Use `cubic` interpolation for organic movements. Use `linear` for mechanical spins.
+
+### Common Pitfalls (Self-Correction)
+*   **"Walking Backwards"**: For a forward step, the leg must swing **Forward (+X Pitch)** first.
+*   **"Natural Joint Constraints"**:
+    -   **Knees**: Bend **BACKWARDS (-X Rotation)**. (Positive rotation breaks the knee forward).
+    -   **Elbows/Fingers**: Bend **FORWARD (+X Rotation)**.
+    -   **Torso**: Leans Forward with **+X Rotation**.
+*   **"Off-Center Rotation"**: If requested to "rotate around center", check if the target Group's `pivot` matches its geometric center. If not, visualize where the pivot *actually* is (usually bottom) and animate accordingly, or compensate with position keys.
+
+
 
 ## Few-Shot Examples
 
