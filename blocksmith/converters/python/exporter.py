@@ -11,8 +11,8 @@ import logging
 import json
 
 # Import centralized rotation utilities
-from blocksmith.converters.rotation_utils import quaternion_to_euler, is_gimbal_lock
-from blocksmith.schema.blockjson import ModelDefinition, CuboidEntity, GroupEntity
+from ..rotation_utils import quaternion_to_euler, is_gimbal_lock
+from blocksmith.schema.blockjson import ModelDefinition, CuboidEntity, GroupEntity, Animation, Channel
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +69,12 @@ class V3ToPythonConverter:
         self._build_entity_map(model.entities)
         
         # Generate code
-        self._generate_header()
+        self._generate_header(model.meta.fps)
         self._generate_entities()
         self._generate_footer()
+        
+        if model.animations:
+            self._generate_animations(model.animations, model.meta.fps)
         
         return '\n'.join(self.code_lines)
     
@@ -82,7 +85,7 @@ class V3ToPythonConverter:
             if entity.parent is None:
                 self.root_entities.append(entity.id)
     
-    def _generate_header(self) -> None:
+    def _generate_header(self, fps: int = 24) -> None:
         """Generate Python code header."""
         self.code_lines.extend([
             '"""',
@@ -90,6 +93,7 @@ class V3ToPythonConverter:
             'Uses XYZ Euler order for consistent, LLM-friendly rotations',
             '"""',
             '',
+            f'TICKS_PER_SEC = {fps}',
             'UNIT = 0.0625',
             '',
             'def create_model():',
@@ -231,6 +235,69 @@ class V3ToPythonConverter:
                 self.code_lines.append(line)
             self.code_lines.append(f'{spaces}),')
 
+    def _generate_animations(self, animations: List[Animation], fps: int = 24) -> None:
+        """Generate create_animations() function."""
+        if not animations:
+            return
+            
+        self.code_lines.extend([
+            '',
+            'def create_animations():',
+            '    animations = []'
+        ])
+        
+        for anim in animations:
+            channel_vars = []
+            
+            for i, ch in enumerate(anim.channels):
+                # Generate keyframes
+                kf_str = []
+                for frame in ch.frames:
+                    # Convert ticks to seconds
+                    time_sec = frame['time'] / fps
+                    
+                    value = frame['value']
+                    val_str = ""
+                    
+                    if ch.property == 'rotation':
+                        # Convert quaternion to euler
+                        euler = quaternion_to_euler(value)
+                        val_str = format_list(euler)
+                    else:
+                        val_str = format_list(value)
+                        
+                    kf_str.append(f"({format_number(time_sec)}, {val_str})")
+                
+                # Create channel
+                var_name = f"ch_{i}"
+                channel_vars.append(var_name)
+                
+                self.code_lines.extend([
+                    f'    {var_name} = channel(',
+                    f'        "{ch.target_id}", "{ch.property}",',
+                    f'        [{", ".join(kf_str)}],',
+                    f'        interpolation="{ch.interpolation}"',
+                    f'    )'
+                ])
+            
+            # Create animation
+            ch_list = f"[{', '.join(channel_vars)}]"
+            
+            # Calculate duration in seconds
+            dur_sec = anim.duration / fps
+            
+            self.code_lines.extend([
+                f'    animations.append(animation(',
+                f'        "{anim.name}",',
+                f'        description="{anim.name}",', # description is not in model, maybe name?
+                f'        duration={format_number(dur_sec)},',
+                f'        loop="{anim.loop_mode}",',
+                f'        channels={ch_list}',
+                f'    ))',
+                ''
+            ])
+            
+        self.code_lines.append('    return animations')
 
 def export_python(
     v3_data: Dict[str, Any],

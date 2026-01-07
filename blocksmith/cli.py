@@ -89,6 +89,62 @@ def generate(prompt, output, model, image, verbose):
             traceback.print_exc()
         sys.exit(1)
 
+@cli.command()
+@click.argument("prompt")
+@click.option("--model-file", "-m", required=True, type=click.Path(exists=True), help="Path to existing model Python file")
+@click.option("--output", "-o", default="anim.py", help="Output file path (default: anim.py)")
+@click.option("--model", help="LLM model override")
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed statistics')
+def animate(prompt, model_file, output, model, verbose):
+    """
+    Generate animations for an existing model.
+    
+    Examples:
+        blocksmith animate "walk cycle" -m steve.py -o walk.py
+        blocksmith animate "wave hand" -m robot.py -o wave.py
+    """
+    try:
+        # Initialize client
+        bs = Blocksmith(default_model=model) if model else Blocksmith()
+
+        if verbose:
+            click.echo(f"Animating: {prompt}")
+            click.echo(f"Base Model: {model_file}")
+
+        # Read model code
+        with open(model_file, 'r') as f:
+            model_code = f.read()
+
+        # Generate animation
+        result = bs.animate(prompt, model_code, model=model)
+
+        # Save output
+        click.echo(f"Saving animation to: {output}")
+        # Force saving as python file
+        if not output.endswith('.py'):
+            output += '.py'
+        
+        with open(output, 'w') as f:
+            f.write(result.dsl)
+
+        # Show stats if verbose
+        if verbose:
+            click.echo("\nGeneration Statistics:")
+            click.echo(f"  Tokens: {result.tokens.total_tokens}")
+            if result.cost is not None:
+                click.echo(f"  Cost: ${result.cost:.4f}")
+            click.echo(f"  Model: {result.model}")
+
+        click.secho(f"✓ Success! Animation saved to {output}", fg='green')
+
+    except Exception as e:
+        click.secho(f"Error: {e}", fg='red', err=True)
+        if verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
 
 @cli.command()
 @click.argument('input_path')
@@ -125,6 +181,83 @@ def convert(input_path, output_path, verbose):
         sys.exit(1)
     except Exception as e:
         click.secho(f"Unexpected error: {e}", fg='red', err=True)
+        if verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@cli.command()
+@click.option('-m', '--model', 'model_path', required=True, help='Path to the base model file (Python DSL).')
+@click.option('-a', '--animation', 'anim_paths', multiple=True, help='Path to animation Python file(s). Can be specified multiple times.')
+@click.option('-o', '--output', required=True, help='Output file path (.glb only supported for now).')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed linking info')
+def link(model_path, anim_paths, output, verbose):
+    """
+    Link a base model with one or more animation files.
+    
+    This allows you to generate a static model first, generate animations separately,
+    and then combine them into a single animated GLB file.
+    
+    Example:
+        blocksmith link -m robot.py -a walk.py -a wave.py -o robot.glb
+    """
+    try:
+        from blocksmith.converters.python.importer import import_python_from_file, import_animation_only
+        from blocksmith.converters.gltf.exporter import export_glb
+
+        # 1. Load Base Model
+        if verbose:
+            click.echo(f"Loading base model: {model_path}")
+        
+        if not Path(model_path).exists():
+             raise FileNotFoundError(f"Model file not found: {model_path}")
+
+        # We primarily support Python DSL for the linker as per design
+        if not model_path.endswith('.py'):
+             click.secho("Warning: Linker is designed for .py model files. Other formats might not work as expected.", fg='yellow')
+
+        # Load model structure
+        model_data = import_python_from_file(model_path)
+        
+        # Initialize animations list if missing
+        if 'animations' not in model_data or model_data['animations'] is None:
+            model_data['animations'] = []
+
+        # 2. Load Animations
+        for anim_path in anim_paths:
+            if verbose:
+                click.echo(f"Linking animation file: {anim_path}")
+            
+            if not Path(anim_path).exists():
+                raise FileNotFoundError(f"Animation file not found: {anim_path}")
+            
+            with open(anim_path, 'r', encoding='utf-8') as f:
+                code = f.read()
+            
+            # Extract animations using the helper
+            anims = import_animation_only(code)
+            
+            if verbose:
+                click.echo(f"  Found {len(anims)} animations: {[a['name'] for a in anims]}")
+            
+            model_data['animations'].extend(anims)
+
+        # 3. Export
+        if verbose:
+            click.echo(f"Exporting combined model to: {output}")
+
+        if output.endswith('.glb'):
+            glb_bytes = export_glb(model_data)
+            with open(output, 'wb') as f:
+                f.write(glb_bytes)
+        else:
+             raise ValueError("Linker currently only supports .glb output.")
+
+        click.secho(f"✓ Success! Linked model saved to {output}", fg='green')
+
+    except Exception as e:
+        click.secho(f"Error linking model: {e}", fg='red', err=True)
         if verbose:
             import traceback
             traceback.print_exc()

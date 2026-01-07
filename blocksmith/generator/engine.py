@@ -75,7 +75,7 @@ class ModelGenerator:
         # If no code blocks, assume entire response is code
         return response_text.strip()
 
-    def generate(self, prompt: str, model: Optional[str] = None, image: Optional[str] = None) -> GenerationResponse:
+    def generate(self, prompt: str, model: Optional[str] = None, image: Optional[str] = None, system_prompt: Optional[str] = None) -> GenerationResponse:
         """
         Generate Python DSL code from a text prompt with optional image.
 
@@ -114,7 +114,7 @@ Return ONLY the Python code without any markdown formatting, explanations, or ex
         messages = [
             {
                 "role": "system",
-                "content": SYSTEM_PROMPT
+                "content": system_prompt or SYSTEM_PROMPT
             },
             {
                 "role": "user",

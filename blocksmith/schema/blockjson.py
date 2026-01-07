@@ -234,6 +234,7 @@ class MetaModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     schema_version: str = Field('3.0', description="Schema version.")
+    fps: int = Field(24, description="Animation ticks per second.")
     texel_density: int = Field(16, description="Pixels per unit for scaling.")
     atlases: Dict[str, AtlasDefinition] = Field(..., description="Embedded atlases (at least one, e.g., 'main').")
     import_source: Optional[Literal['bbmodel', 'gltf', 'bedrock']] = Field(None, description="Source for round-trips.")

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from blocksmith.generator.engine import ModelGenerator
 from blocksmith.converters import import_python, export_glb, export_gltf, export_bbmodel
 from blocksmith.llm.client import TokenUsage
+from blocksmith.generator.prompts import ANIMATION_SYSTEM_PROMPT
 
 
 @dataclass
@@ -172,6 +173,48 @@ class Blocksmith:
         # when no model override is specified (needed for session stats tracking)
         gen_response = self.generator.generate(prompt, model=model, image=image)
 
+        return GenerationResult(
+            dsl=gen_response.code,
+            tokens=gen_response.tokens,
+            cost=gen_response.cost,
+            model=gen_response.model,
+            _bs=self
+        )
+
+    def animate(
+        self,
+        prompt: str,
+        model_code: str,
+        model: Optional[str] = None
+    ) -> GenerationResult:
+        """
+        Generate animations for an existing model structure.
+
+        Args:
+            prompt: Description of the animation (e.g., "walk cycle")
+            model_code: The Python source code of the existing model (defines IDs)
+            model: Optional LLM model override
+
+        Returns:
+            GenerationResult: Contains the generated create_animations() code
+        """
+        # Construct specific prompt for animation
+        # We embed the model code so the LLM knows the IDs
+        full_prompt = f"""# Animation Request
+{prompt}
+
+# Existing Model Structure
+Use the Group IDs defined in this code:
+{model_code}
+"""
+        
+        # Call generator with specific system prompt
+        gen_response = self.generator.generate(
+            prompt=full_prompt,
+            model=model,
+            system_prompt=ANIMATION_SYSTEM_PROMPT
+        )
+        
         return GenerationResult(
             dsl=gen_response.code,
             tokens=gen_response.tokens,
