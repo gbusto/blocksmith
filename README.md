@@ -23,7 +23,14 @@ BlockSmith is a powerful Python library for generating block-style 3D models tha
 **Generate from anything:**
 ```bash
 # Text to 3D model
+# Text to 3D model
 blocksmith generate "a castle" -o castle.glb
+
+# Create animations
+blocksmith animate "walk cycle" -m castle.py -o walk.py
+
+# Link them together
+blocksmith link -m castle.py -a walk.py -o castle_animated.glb
 ```
 
 ![Castle Example](castle-example-model.jpg)
@@ -178,6 +185,10 @@ blocksmith generate "turn this into blocks" --image photo.jpg -o model.glb
 
 # Convert between formats
 blocksmith convert castle.bbmodel castle.glb
+
+# Animation Workflow
+blocksmith animate "wave hand" -m steve.py -o wave.py
+blocksmith link -m steve.py -a wave.py -o steve_animated.glb
 ```
 
 ### Python SDK
@@ -226,8 +237,39 @@ blocksmith convert tree.bbmodel tree.json
 ```bash
 blocksmith --help
 blocksmith generate --help
+blocksmith --help
+blocksmith generate --help
 blocksmith convert --help
+blocksmith animate --help
+blocksmith link --help
 ```
+### Animation Workflow
+
+**1. Generate Animation Code:**
+```bash
+# Creates a Python file containing just the animation logic
+blocksmith animate "make it run" -m model.py -o run.py
+```
+
+**2. Link to Model:**
+```bash
+# Merges the model and animation(s) into a GLB
+blocksmith link -m model.py -a run.py -o final.glb
+
+# You can stick multiple animations together!
+blocksmith link -m model.py -a walk.py -a run.py -a jump.py -o final.glb
+```
+
+### ⚠️ Animation Caveats & Best Practices
+
+1.  **Centered Pivots:** If you want an object to rotate around its center (like a floating cube), the **Model** must have a Group pivot at its geometric center.
+    *   *Bad:* A cube at `[0,0,0]` will rotate around the bottom-left corner.
+    *   *Good:* A cube inside a Group at `[0, 0.5, 0]` will rotate around its center.
+    *   *Fix:* Ask the generator for "a cube centered at 0,0,0 ready for rotation".
+2.  **Speed**: LLMs tend to generate very fast animations (1.0s). For smooth loops, try asking for "slow, smooth rotation" or specifically "2 to 4 seconds duration".
+3.  **Forward Direction**: In BlockSmith, **North is -Z**.
+    *   Arms raising "Forward" will rotate towards -Z.
+    *   The LLM knows this, but sometimes needs reminders for complex moves.
 
 ### Python SDK Usage
 
@@ -523,7 +565,8 @@ This is an alpha release focused on core features. Current limitations:
 - ✅ Format conversion API
 
 **v0.2 (Planned)**
-- [ ] Animation support
+**v0.2 (Planned)**
+- [x] Animation support (Basic)
 - [ ] Blockbench plugin
 - [ ] Web UI
 
