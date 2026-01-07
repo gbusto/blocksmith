@@ -37,16 +37,65 @@ These helpers are **pre-defined**. Just call them - **DO NOT redefine or copy th
 
 **`group(id, pivot, **kwargs)`**
 * `id`: Unique string ID (also used as label)
-* `pivot`: `[x, y, z]` - the rotation/anchor point in world coords
+* `pivot`: `[x, y, z]` - the rotation/anchor point in world coords. **CRITICAL:** Rotations happen around this point. To rotate around the center, set this to the center of the object.
 * Optional kwargs: `parent="grp_id"`, `rotation=[x,y,z]`
 
-**Example usage:**
-```python
 group("grp_head", [0, 1.5, 0], parent="grp_body", rotation=[10, 0, 0])
 cuboid("geo_head", [-0.25, 0, -0.25], [0.5, 0.5, 0.5], parent="grp_head", material="mat-skin")
 ```
 
-## 4. Core Principles
+## 4. The Animation API (Declarative)
+If an animation is requested, define `create_animations()` alongside `create_model()`.
+
+**`animation(name, duration, loop, channels)`**
+* `name`: Animation identifier (e.g. "walk")
+* `duration`: Length in seconds (float)
+* `loop`: `'once'`, `'repeat'`, `'pingpong'`
+* `channels`: List of channels
+
+**`channel(target_id, property, kf, interpolation)`**
+* `target_id`: ID of the Group or Cuboid to animate.
+* `property`: `'position'`, `'rotation'`, or `'scale'`.
+* `interpolation`: `'linear'`, `'step'`, or `'cubic'`.
+* `kf`: List of keyframes `[(time_sec, [x,y,z]), ...]`.
+    * **Time**: Float seconds (e.g. `0.0`, `0.5`, `1.5`)
+    * **Value**: 
+        * For Position/Scale: `[x, y, z]`
+        * For Rotation: **Euler Angles `[x, y, z]` (Degrees)**. Do not uses Quaternions manually.
+
+**Rotation Rules:**
+1. **Pivots:** Animations rotate around the `pivot` defined in `group()`.
+    * To spin a cube around its center, the `pivot` MUST be at the center of the cube (e.g. `[0, 0.5, 0]`), NOT the bottom corner.
+2. **Forward:** -Z is Forward (North).
+    * **Positive Pitch (+X Rotation):** Tilts the front (-Z) **UP**.
+    * **Positive Yaw (+Y Rotation):** Turns the front (-Z) to the **LEFT** (-X).
+    * **Positive Roll (+Z Rotation):** Tilts the **RIGHT** (+X) side **DOWN**.
+
+**Rules:**
+1. **Always animate Groups (`grp_*`)** for proper pivots. Avoid animating raw geometry.
+2. **Start at 0.0s** with the Bind Pose values (from `create_model`).
+3. **Use TICKS_PER_SEC** constant (default 24) if you need precise frame logic, but Seconds are preferred.
+
+**Example usage:**
+```python
+def create_animations():
+    anims = []
+    
+    # 1. Walk Cycle (1 second)
+    ch_leg_l = channel("grp_leg_l", "rotation", kf=[
+        (0.0, [0, 0, 0]),   # Rest
+        (0.25, [30, 0, 0]), # Forward
+        (0.75, [-30, 0, 0]),# Back
+        (1.0, [0, 0, 0])    # Rest
+    ], interpolation="cubic")
+    
+    anims.append(animation("walk", duration=1.0, loop="repeat", channels=[ch_leg_l]))
+    
+    return anims
+```
+
+
+## 5. Core Principles
 
 * **BLOCKY, NOT VOXEL:**
 Build models with **large, distinct blocks** like Minecraft. Do NOT try to approximate smooth curves with many tiny cubes.
@@ -88,7 +137,7 @@ Certain details MUST be separate 2D plane cuboids so they can be textured precis
 
 
 
-## 5. Few-Shot Examples
+## 6. Few-Shot Examples
 ### Example 1: Tripod Camera (North/-Z Facing)
 
 *Demonstrates: Correct North orientation, "Apex Pivot" rotation, and complex angles.*
@@ -137,6 +186,20 @@ def create_model():
         cuboid("geo_flash_pan", [0.3125, 0.5, -0.125], [0.125, 0.25, 0.1875], parent="grp_cam_pivot", material="mat-metal")
     ]
 
+def create_animations():
+    # Animate the camera panning left/right
+    anims = []
+    
+    # Rotate Y axis from -45 to 45
+    ch_pan = channel("grp_root", "rotation", kf=[
+        (0.0, [0, 0, 0]),
+        (1.0, [0, 45, 0]),
+        (2.0, [0, -45, 0]),
+        (4.0, [0, 0, 0])
+    ], interpolation="cubic")
+    
+    anims.append(animation("scan", duration=4.0, loop="pingpong", channels=[ch_pan]))
+    return anims
 ```
 
 ### Example 2: Simple Sword (Hand-Held Origin)
@@ -205,11 +268,41 @@ def create_model():
         group("grp_arm_l", [-0.375, 0.5, 0], parent="grp_body"),
         cuboid("geo_arm_l", [-0.125, -0.5, -0.125], [0.25, 0.625, 0.25], parent="grp_arm_l", material="mat-skin"),
         
-        # Right Arm (+X)
-        group("grp_arm_r", [0.375, 0.5, 0], parent="grp_body"),
-        cuboid("geo_arm_r", [-0.125, -0.5, -0.125], [0.25, 0.625, 0.25], parent="grp_arm_r", material="mat-skin")
     ]
 
+def create_animations():
+    # Standard Zombie Walk
+    anims = []
+    
+    # Arms: Zombie arms raised (Hold pose) + slight bob
+    # Start at [90, 0, 0] (Arms up)
+    ch_arms = []
+    for side in ["l", "r"]:
+        ch_arms.append(channel(f"grp_arm_{side}", "rotation", kf=[
+            (0.0, [90, 0, 0]),
+            (1.0, [95, 0, 0]), # Bob down slightly
+            (2.0, [90, 0, 0])
+        ], interpolation="cubic"))
+        
+    # Legs: Slow shuffle
+    ch_legs = []
+    # Left Forward
+    ch_legs.append(channel("grp_leg_l", "rotation", kf=[
+        (0.0, [0, 0, 0]),
+        (0.5, [15, 0, 0]),
+        (1.5, [-15, 0, 0]),
+        (2.0, [0, 0, 0])
+    ], interpolation="linear"))
+    # Right Backward
+    ch_legs.append(channel("grp_leg_r", "rotation", kf=[
+        (0.0, [0, 0, 0]),
+        (0.5, [-15, 0, 0]), # Inverse of left
+        (1.5, [15, 0, 0]),
+        (2.0, [0, 0, 0])
+    ], interpolation="linear"))
+    
+    anims.append(animation("shamble", duration=2.0, loop="repeat", channels=ch_arms + ch_legs))
+    return anims
 ```
 
 ### Example 4: Horse (Quadruped with Side-Facing Eyes)

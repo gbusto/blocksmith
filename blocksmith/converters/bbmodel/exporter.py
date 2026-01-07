@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any, Union
 
 # Import BlockJSON schema
 from blocksmith.schema.blockjson import ModelDefinition, CuboidEntity, GroupEntity
-from blocksmith.converters.uv_mapper import to_bbmodel
+from ..uv_mapper import to_bbmodel
 
 logger = logging.getLogger(__name__)
 

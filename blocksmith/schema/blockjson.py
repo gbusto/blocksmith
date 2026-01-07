@@ -222,7 +222,7 @@ class Animation(BaseModel):
     A single animation clip containing channels.
     """
     name: str = Field(..., description="Animation name (e.g., 'walk').")
-    duration: int = Field(..., description="Total duration in ticks/frames.")
+    duration: float = Field(..., description="Total duration in seconds (or ticks).")
     loop_mode: Optional[Literal['once', 'repeat', 'pingpong']] = Field('repeat', description="Playback mode.")
     channels: List[Channel] = Field(..., description="Channels in this animation.")
 
@@ -234,6 +234,7 @@ class MetaModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     schema_version: str = Field('3.0', description="Schema version.")
+    fps: int = Field(24, description="Animation ticks per second.")
     texel_density: int = Field(16, description="Pixels per unit for scaling.")
     atlases: Dict[str, AtlasDefinition] = Field(..., description="Embedded atlases (at least one, e.g., 'main').")
     import_source: Optional[Literal['bbmodel', 'gltf', 'bedrock']] = Field(None, description="Source for round-trips.")

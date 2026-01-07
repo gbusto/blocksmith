@@ -90,6 +90,12 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install in editable mode
 pip install -e .
+
+# Updating to latest version:
+# git pull origin main
+# pip install -e .  # Re-run if dependencies changed
+# If you hit weird import errors:
+# deactivate && source .venv/bin/activate
 ```
 
 ### 2. Set Up API Key

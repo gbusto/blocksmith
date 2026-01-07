@@ -366,9 +366,16 @@ def blender_entrypoint() -> None:
             obj_map[entity["id"]].parent = obj_map[parent_id]
 
     # Debug: Print object transforms before export
-    print("\nObject transforms before export:")
+    print("\nObject transforms before export (BIND POSE CAPTURE):")
+    BIND_POSE = {}
     for obj_name, obj in obj_map.items():
         if obj.type == 'MESH' or obj.type == 'EMPTY':
+            BIND_POSE[obj.name] = {
+                "location": obj.location.copy(),
+                "rotation_quaternion": obj.rotation_quaternion.copy(),
+                "scale": obj.scale.copy(),
+                "rotation_mode": obj.rotation_mode
+            }
             print(f"{obj.name}: location={list(obj.location)}, rotation_quaternion={list(obj.rotation_quaternion)}, scale={list(obj.scale)}")
 
     # Export GLTF/GLB
@@ -397,6 +404,253 @@ def blender_entrypoint() -> None:
         except Exception as e:
             print(f"Warning: Could not enable GLTF_EMBEDDED: {e}")
 
+    # ============================================================================
+    # ANIMATION PROCESSING
+    # ============================================================================
+    
+    def _map_interpolation(interp: str) -> str:
+        """Map V3 interpolation to Blender interpolation mode."""
+        if interp == 'step':
+            return 'CONSTANT'
+        elif interp == 'cubic':
+            return 'BEZIER'
+        return 'LINEAR'
+
+    animations = v3.get("animations", [])
+    
+    # Pre-build entity map for fast lookup of bind pose data (Rest Pose)
+    entity_map = {e.get("id"): e for e in v3.get("entities", [])}
+
+    def _reset_scene_state(obj_map_local: dict, entity_map_local: dict) -> None:
+        """
+        Reset all objects to their V3 bind pose and clear animation state.
+        This enforces a 'Clean Room' protocol between animations to prevent 'Dirty Canvas' leakage.
+        """
+        for eid, obj_reset in obj_map_local.items():
+            # 1. Reset Transforms to V3 Bind Pose
+            ent_data = entity_map_local.get(eid, {})
+            
+            piv = ent_data.get("pivot", [0, 0, 0])
+            rot = ent_data.get("rotation", [1, 0, 0, 0])
+            scl = ent_data.get("scale", [1, 1, 1])
+
+            obj_reset.location = transform_position_v3_to_blender(piv)
+            
+            obj_reset.rotation_mode = 'QUATERNION'
+            rot_norm = normalize_quaternion(rot)
+            q_list = transform_quaternion_v3_to_blender(rot_norm)
+            obj_reset.rotation_quaternion = Quaternion(q_list)
+            
+            obj_reset.scale = (scl[0], scl[1], scl[2])
+
+            # 2. Clear Active Action
+            if obj_reset.animation_data:
+                obj_reset.animation_data.action = None
+                
+                # 3. Mute all NLA tracks to ensure they don't influence the next record/evaluation
+                if obj_reset.animation_data.nla_tracks:
+                    for t in obj_reset.animation_data.nla_tracks:
+                        t.mute = True
+                        t.is_solo = False
+        
+        # Force update
+        bpy.context.view_layer.update()
+
+    if animations:
+        print(f"Processing {len(animations)} animations...")
+        
+        for anim in animations:
+            # CRITICAL: Clean the canvas before processing this animation
+            _reset_scene_state(obj_map, entity_map)
+            
+            anim_name = anim.get("name", "animation")
+            loop_mode = anim.get("loop_mode", "repeat")
+            
+            # CRITICAL FIX: Prevent "Duration Leak" (Time Contamination)
+            # Calculate the actual duration of THIS animation from its keys.
+            # If we don't do this, Blender defaults to the longest previous animation (e.g., Explode=60),
+            # causing short animations (Drive=30) to have 30 frames of dead air.
+            max_anim_frame = 0.0
+            for ch in anim.get("channels", []):
+                frames = ch.get("frames", [])
+                if frames:
+                    last_time = frames[-1].get("time", 0.0)
+                    if last_time > max_anim_frame:
+                        max_anim_frame = last_time
+            
+            # Sanity check: If animation is empty, default to 1
+            if max_anim_frame == 0:
+                max_anim_frame = 1.0
+            
+            # Set the Scene Timeline limits for the Exporter
+            # We extend the scene to fit the longest animation seen so far.
+            # Individual animations are clamped by their NLA Strip length (see below).
+            bpy.context.scene.frame_start = 0
+            current_end = bpy.context.scene.frame_end
+            new_end = max(current_end, int(max_anim_frame))
+            bpy.context.scene.frame_end = new_end
+            print(f"  Configured Timeline for '{anim_name}': End Frame = {new_end} (Local Max: {max_anim_frame})")
+
+            # Group channels by target object
+            channels_by_target = {}
+            for channel in anim.get("channels", []):
+                target_id = channel.get("target_id")
+                if target_id not in obj_map:
+                    print(f"  Warning: Animation target {target_id} not found, skipping channel")
+                    continue
+                if target_id not in channels_by_target:
+                    channels_by_target[target_id] = []
+                channels_by_target[target_id].append(channel)
+            
+            # Create Actions and NLA Tracks for each affected object
+            for target_id, channels in channels_by_target.items():
+                obj = obj_map[target_id]
+                
+                # Create a new Action for this object-animation pair
+                # Name it carefully so debugging is invalid, but NLA track name matters more for GLTF
+                action_name = f"{anim_name}_{target_id}"
+                action = bpy.data.actions.new(name=action_name)
+                
+                # Ensure object has animation data
+                if not obj.animation_data:
+                    obj.animation_data_create()
+                
+                print(f"Creating Action '{action_name}' for object '{target_id}'")
+
+                # Process channels
+                for channel in channels:
+                    prop = channel.get("property")
+                    print(f"  Processing channel: property={prop}, frames={len(channel.get('frames', []))}")
+                    interpolation = _map_interpolation(channel.get("interpolation", "linear"))
+                    frames = channel.get("frames", [])
+                    
+                    data_path = ""
+                    num_indices = 0
+                    
+                    if prop == "position":
+                        data_path = "location"
+                        num_indices = 3
+                    elif prop == "rotation":
+                        data_path = "rotation_quaternion"
+                        num_indices = 4
+                    elif prop == "scale":
+                        data_path = "scale"
+                        num_indices = 3
+                    else:
+                        print(f"  Warning: Unknown animation property {prop}")
+                        continue
+                        
+                    # Create F-Curves
+                    fcurves = []
+                    for i in range(num_indices):
+                        fc = action.fcurves.find(data_path, index=i)
+                        if not fc:
+                            fc = action.fcurves.new(data_path, index=i)
+                        fcurves.append(fc)
+                    
+                    # Insert Keyframes
+                    for kf in frames:
+                        time = kf.get("time", 0)
+                        val_v3 = kf.get("value")
+                        val_b = []
+                        
+                        # Apply Coordinate Transformations
+                        if prop == "position":
+                            # V3 Pos -> Blender Pos
+                            val_b = transform_position_v3_to_blender(val_v3)
+                        elif prop == "rotation":
+                            # V3 Quat -> Blender Quat
+                            val_b = transform_quaternion_v3_to_blender(val_v3)
+                        elif prop == "scale":
+                            # V3 Scale [x, y, z] -> Blender Scale [x, z, -y]? 
+                            # Scale is magnitude. Just swap axes. Y(up) becomes Z(up). Z(forward) becomes Y(forward).
+                            # Since scale is unsigned size, we ignore the 'negative' direction of Z->-Y mapping.
+                            # So [sx, sy, sz] -> [sx, sz, sy]
+                            val_b = [val_v3[0], val_v3[2], val_v3[1]]
+                        
+                        # Insert frame data
+                        for i in range(num_indices):
+                            # We use 'FAST' for initial sparse creation
+                            kp = fcurves[i].keyframe_points.insert(time, val_b[i], options={'FAST'})
+                            kp.interpolation = interpolation
+
+                # 1. Stash the Sparse Action directly to NLA
+                # We do NOT bake. This preserves the sparse nature of the V3 data.
+                # "Drive" -> Rotation keys only. "Explode" -> Position keys only.
+                # This allows runtime composition (blending) in the game engine.
+                
+                action.name = anim_name
+                
+                track = obj.animation_data.nla_tracks.new()
+                track.name = anim_name # Final GLTF Name
+                
+                start_frame = 0
+                strip = track.strips.new(name=anim_name, start=start_frame, action=action)
+                
+                # CRITICAL: Clamp the strip to the actual animation length.
+                # This ensures that short animations don't inherit the scene's global end frame.
+                strip.frame_end = float(max_anim_frame)
+                
+                # Mute to prevent it affecting the viewport or other exports during this session loop
+                # The GLTF exporter works with NLA tracks even if muted (usually), 
+                # but to be safe and match standard Blender-GLTF workflows where we want distinct clips:
+                # Muting essentially "stashes" it.
+                track.mute = True
+                
+                # Clear active action so the object is clean for the next channel/animation
+                obj.animation_data.action = None
+                
+                print(f"  > Stashed sparse action '{anim_name}' to NLA track.")
+
+
+    # CRITICAL: Reset all objects to their V3 bind pose before export.
+    # To prevent NLA tracks from overriding the bind pose during the "Node" export phase,
+    # we temporarily disable NLA evaluation on the objects.
+    # The GLTF exporter's 'NLA_TRACKS' mode should still be able to find and export the tracks
+    # stored in obj.animation_data.nla_tracks, even if use_nla is False for the scene.
+    
+    print("\nPreparing for export: Disabling NLA evaluation and resetting bind pose (CAPTURE & RESTORE)...")
+    
+    # 0. RESTORE BIND POSE (Fixes 'Zero Fallacy')
+    # Instead of blindly zeroing transforms (which flattens pyramids), we restore the
+    # captured BIND_POSE state associated with the static model structure.
+    for obj_name, data in BIND_POSE.items():
+        if obj_name in bpy.data.objects:
+             obj = bpy.data.objects[obj_name]
+             try:
+                 obj.location = data["location"]
+                 obj.rotation_mode = data["rotation_mode"]
+                 obj.rotation_quaternion = data["rotation_quaternion"]
+                 obj.scale = data["scale"]
+             except Exception as e:
+                 print(f"Warning: Failed to restore bind pose for {obj_name}: {e}")
+    
+    # NEW STEP 7 (CRITICAL): UNMUTE ALL TRACKS FOR EXPORT
+    # We unmute all tracks so the exporter sees them as active.
+    # This causes blending/crosstalk, but we fix that with the _sanitize_gltf post-processor.
+    for entity in v3.get("entities", []):
+         entity_id = entity.get("id")
+         if entity_id in obj_map:
+             obj_unmute = obj_map[entity_id]
+             if obj_unmute.animation_data and obj_unmute.animation_data.nla_tracks:
+                 print(f"  Unmuting NLA tracks for {entity_id}...")
+                 for t in obj_unmute.animation_data.nla_tracks:
+                     t.mute = False
+                     t.is_solo = False
+    
+    # DEBUG: Inspect Actions before export
+    print("\n[DEBUG] Inspecting Blender Actions before Export:")
+    for action in bpy.data.actions:
+        print(f"  Action '{action.name}':")
+        paths = set()
+        for fc in action.fcurves:
+            paths.add(fc.data_path)
+        for p in paths:
+            print(f"    - {p}")
+    
+    # Ensure all manual changes are propagated
+    bpy.context.view_layer.update()
+
     bpy.ops.export_scene.gltf(
         filepath=output_path,
         export_format=export_format,
@@ -406,8 +660,20 @@ def blender_entrypoint() -> None:
         export_apply=False,  # Don't apply modifiers
         export_attributes=True,
         use_visible=True,
-        export_yup=True,  # Ensure Y-up coordinate system (matches v3 and GLTF)
-        export_animations=False,  # Disable animations to simplify
+        export_yup=True,
+        export_animations=True,
+        
+        # NOTE: We allow sampling (default) because we are exporting Muted tracks.
+        # The exporter handles the evaluation.
+        # export_force_sampling=False, 
+        
+        # NLA Merging settings
+        # Force NLA_TRACKS mode to ensure merging by Track Name
+        export_animation_mode='NLA_TRACKS',
+        export_nla_strips=True,  # Explicitly enable NLA export
+        export_def_bones=True,   # Ensure bones are exported
+        export_anim_single_armature=False, # We are animating separate objects, not a single armature
+        
         use_mesh_edges=False,
         use_mesh_vertices=True,
         export_cameras=False,
@@ -449,6 +715,11 @@ def _run_blender_export(v3_json_path: str, output_path: str, fmt_arg: str) -> No
         text=True,
         check=False,
     )
+    # DEBUG: Always print Blender output to see debug prints
+    print(f"Blender STDOUT:\n{result.stdout}")
+    if result.stderr:
+        print(f"Blender STDERR:\n{result.stderr}")
+
     if result.returncode != 0:
         logger.error("Blender exporter failed: rc=%s\nSTDOUT:\n%s\nSTDERR:\n%s", result.returncode, result.stdout, result.stderr)
         raise RuntimeError("Blender V3 export failed")
@@ -469,19 +740,337 @@ def _run_blender_export(v3_json_path: str, output_path: str, fmt_arg: str) -> No
             raise RuntimeError("Blender V3 export produced no output file")
 
 
-def export_glb(model_json: object) -> bytes:
+
+
+def _sanitize_gltf(output_path: str, v3_json: object) -> None:
     """
-    Export a v3 model (dict or JSON string) to GLB bytes by invoking Blender.
+    Post-process the GLB to remove unauthored animation channels AND trim time domains.
+    Fixes "Duration Leak" where short animations inherit long timelines from Blender.
     """
+    try:
+        from pygltflib import GLTF2, BufferView, Accessor, Buffer
+        import struct
+    except ImportError:
+        print("Warning: pygltflib not found, skipping sanitization.")
+        return
+
+    # Ensure v3_json is a dict
+    if isinstance(v3_json, str):
+        try:
+            v3_json = json.loads(v3_json)
+        except Exception:
+            return
+    if not isinstance(v3_json, dict):
+        return
+
+    try:
+        gltf = GLTF2().load(output_path)
+    except Exception as e:
+        print(f"Warning: Failed to load GLB for sanitization: {e}")
+        return
+
+    # 1. Build Maps: AnimName -> AllowedChannels, AnimName -> Duration
+    allowed_channels = {}
+    anim_durations = {}
+    
+    for anim in (v3_json.get("animations") or []):
+        anim_name = anim.get("name")
+        allowed_channels[anim_name] = set()
+        max_t = 0.0
+        
+        for ch in anim.get("channels", []):
+            target_id = ch.get("target_id")
+            prop = ch.get("property")
+            path = "translation" if prop == "position" else "rotation" if prop == "rotation" else "scale"
+            allowed_channels[anim_name].add((target_id, path))
+            
+            # Track duration
+            frames = ch.get("frames", [])
+            if frames:
+                t = frames[-1].get("time", 0.0)
+                if t > max_t: max_t = t
+        
+        if max_t == 0: max_t = 24.0 # Default 1 second (24 frames)
+        anim_durations[anim_name] = max_t
+
+    # Helper to read accessor data
+    def read_accessor(acc_idx):
+        acc = gltf.accessors[acc_idx]
+        bv = gltf.bufferViews[acc.bufferView]
+        buf = gltf.buffers[bv.buffer]
+        
+        # Safe blob access
+        blob = gltf.binary_blob
+        if callable(blob): blob = blob()
+        
+        data = gltf.get_data_from_buffer_uri(buf.uri) if buf.uri else (blob or b"")
+        start = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+        
+        # Determine format
+        comp_count = {
+            "SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16
+        }.get(acc.type, 1)
+        
+        # Assume float for animation (5126)
+        fmt = "<" + ("f" * comp_count)
+        stride = struct.calcsize(fmt)
+        
+        values = []
+        for i in range(acc.count):
+            offset = start + (i * stride) # Note: tightly packed assumption (no bufferView stride)
+            if bv.byteStride and bv.byteStride > 0:
+                 offset = start + (i * bv.byteStride)
+            values.append(struct.unpack_from(fmt, data, offset))
+        return values
+
+    # Helper to append new data
+    def append_data(values, type_str):
+        comp_count = {
+            "SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4
+        }.get(type_str, 1)
+        fmt = "<" + ("f" * comp_count)
+        new_bytes = b"".join([struct.pack(fmt, *v) for v in values])
+        
+        # Align to 4 bytes
+        padding = (4 - (len(new_bytes) % 4)) % 4
+        new_bytes += b"\x00" * padding
+        
+        # Safe blob access/setup
+        blob = gltf.binary_blob
+        if callable(blob): blob = blob()
+        if blob is None: blob = b""
+        
+        offset = len(blob)
+        final_blob = blob + new_bytes
+        
+        # Hack: pygltflib expects binary_blob to be a callable method in some versions.
+        # So we overwrite it with a lambda that returns our new data.
+        gltf.binary_blob = lambda: final_blob
+        
+        # Return (offset, length)
+        return offset, len(new_bytes)
+
+    # 2. Iterate GLTF Animations
+    cleaned_count = 0
+    trimmed_count = 0
+    
+    if gltf.animations:
+        for gltf_anim in gltf.animations:
+            if gltf_anim.name not in allowed_channels:
+                continue
+            
+            allowed_set = allowed_channels[gltf_anim.name]
+            target_duration_frames = anim_durations.get(gltf_anim.name, 24.0)
+            target_duration_sec = target_duration_frames / 24.0
+            
+            new_channels = []
+            
+            # Filter Channels
+            for ch in gltf_anim.channels:
+                if ch.target.node is None: continue
+                
+                # Resolve Node Name
+                node_name = f"node_{ch.target.node}"
+                if gltf.nodes and ch.target.node < len(gltf.nodes):
+                     if gltf.nodes[ch.target.node].name:
+                         node_name = gltf.nodes[ch.target.node].name
+                
+                path = ch.target.path
+                
+                if (node_name, path) in allowed_set:
+                    new_channels.append(ch)
+                    
+                    # PROCESS SAMPLER trimming
+                    sampler = gltf_anim.samplers[ch.sampler]
+                    
+                    # Check if already processed (heuristic: if min/max on input matches target?)
+                    # Or simpler: Just re-slice always. 
+                    # Optimization: Only slice if max time > target + epsilon
+                    
+                    input_times = read_accessor(sampler.input) # List of (t,) tuples
+                    times_flat = [t[0] for t in input_times]
+                    if not times_flat: continue
+                    
+                    max_t_in = max(times_flat)
+                    
+                    if max_t_in > target_duration_sec + 0.01: # Epsilon
+                        # Need to Trim
+                        # Find cutoff index
+                        cutoff_idx = 0
+                        for i, t in enumerate(times_flat):
+                            if t <= target_duration_sec + 0.001:
+                                cutoff_idx = i
+                        
+                        # Inclusive slice
+                        slice_len = cutoff_idx + 1
+                        
+                        # Read Output Values
+                        output_vals = read_accessor(sampler.output)
+                        
+                        # Check compatibility
+                        if len(output_vals) != len(input_times):
+                            print("Warning: Accessor count mismatch, skipping trim.")
+                            continue
+                        
+                        new_times = input_times[:slice_len]
+                        new_outputs = output_vals[:slice_len]
+                        
+                        # Create New Accessors
+                        # 1. Output (Keys)
+                        out_vals_flat = new_outputs # List of tuples
+                        # Look up type from old accessor
+                        old_out_acc = gltf.accessors[sampler.output]
+                        out_offset, out_len = append_data(out_vals_flat, old_out_acc.type)
+                        
+                        # Create BufferView
+                        out_bv = BufferView(buffer=0, byteOffset=out_offset, byteLength=out_len)
+                        gltf.bufferViews.append(out_bv)
+                        out_bv_idx = len(gltf.bufferViews) - 1
+                        
+                        # Create Accessor
+                        new_out_acc = Accessor(
+                            bufferView=out_bv_idx,
+                            componentType=5126, # FLOAT
+                            count=slice_len,
+                            type=old_out_acc.type
+                        )
+                        gltf.accessors.append(new_out_acc)
+                        new_out_acc_idx = len(gltf.accessors) - 1
+                        
+                        # 2. Input (Times)
+                        in_vals_flat = new_times
+                        in_offset, in_len = append_data(in_vals_flat, "SCALAR")
+                        
+                        in_bv = BufferView(buffer=0, byteOffset=in_offset, byteLength=in_len)
+                        gltf.bufferViews.append(in_bv)
+                        in_bv_idx = len(gltf.bufferViews) - 1
+                        
+                        new_in_acc = Accessor(
+                            bufferView=in_bv_idx,
+                            componentType=5126, # FLOAT
+                            count=slice_len,
+                            type="SCALAR",
+                            min=[new_times[0][0]],
+                            max=[new_times[-1][0]]
+                        )
+                        gltf.accessors.append(new_in_acc)
+                        new_in_acc_idx = len(gltf.accessors) - 1
+                        
+                        # Update Sampler
+                        # CRITICAL: We must make a NEW sampler if shared?
+                        # Using 'append' to sampler list? 
+                        # To be safe, we perform IN-PLACE update if unique, or copy?
+                        # For simplicity, we update in place. This fixes THIS channel. 
+                        # If another channel uses it, it gets trimmed too (correct, if same anim).
+                        # But wait, samplers are per-animation struct. They are NOT cross-animation shared usually.
+                        # (Unless blender reuses them).
+                        # We will assume unique sampler per anim-channel-group for now.
+                        
+                        sampler.input = new_in_acc_idx
+                        sampler.output = new_out_acc_idx
+                        trimmed_count += 1
+
+                else:
+                    cleaned_count += 1
+            
+            gltf_anim.channels = new_channels
+
+    if cleaned_count > 0 or trimmed_count > 0:
+        print(f"Sanitized GLTF: Removed {cleaned_count} channels, Trimmed {trimmed_count} samplers.")
+        gltf.save(output_path)
+
+def _merge_gltf_single_animation(target_bytes: bytes, source_bytes: bytes) -> bytes:
+    """
+    Merges the animation from source_bytes into target_bytes.
+    Assumes source_bytes contains ONE animation (and geometry).
+    We append the source's binary buffer to the target, remap indices, and add the animation.
+    This creates file size overhead (duplicate geometry in buffer) but ensures total isolation.
+    """
+    try:
+        from pygltflib import GLTF2
+    except ImportError:
+        # If pygltflib is missing, we can't merge. Just return target.
+        # Ideally this should log a warning.
+        return target_bytes
+
+    target = GLTF2.load_from_bytes(target_bytes)
+    source = GLTF2.load_from_bytes(source_bytes)
+
+    if not source.animations:
+        return target_bytes
+
+    # 1. Prepare Binary Blob Concatenation
+    t_blob = target.binary_blob() or b""
+    s_blob = source.binary_blob() or b""
+    
+    # Calculate offset for source bufferViews
+    blob_offset = len(t_blob)
+    
+    # Concatenate blobs
+    target_blob_final = t_blob + s_blob
+    target.set_binary_blob(target_blob_final)
+
+    # 2. Remap and Append BufferViews
+    bv_map = {}
+    if not target.buffers: # Should exist for GLB
+        target.buffers.append(source.buffers[0]) 
+    
+    base_bv_idx = len(target.bufferViews)
+    base_acc_idx = len(target.accessors)
+    
+    for i, bv in enumerate(source.bufferViews):
+        bv.byteOffset = (bv.byteOffset or 0) + blob_offset
+        target.bufferViews.append(bv)
+        bv_map[i] = base_bv_idx + i
+
+    # 3. Remap and Append Accessors
+    acc_map = {}
+    for i, acc in enumerate(source.accessors):
+        if acc.bufferView is not None:
+            acc.bufferView = bv_map[acc.bufferView]
+        target.accessors.append(acc)
+        acc_map[i] = base_acc_idx + i
+
+    # 4. Remap and Append Animation
+    src_anim = source.animations[0]
+    
+    for sampler in src_anim.samplers:
+        if sampler.input is not None:
+            sampler.input = acc_map[sampler.input]
+        if sampler.output is not None:
+            sampler.output = acc_map[sampler.output]
+            
+    # No node remapping needed (Assumption: Identical Hierarchy)
+    target.animations.append(src_anim)
+    
+    result = target.save_to_bytes()
+    if isinstance(result, list):
+        # Join list of bytes segments
+        return b"".join(result)
+    return result
+
+
+def _export_glb_single_pass(model_json: object, output_path: str = None) -> bytes:
+    """
+    Internal function: Runs a single blender export pass.
+    Renamed from original export_glb to support multi-pass strategy.
+    """
+    # Create temp dir
     tmp_dir = tempfile.mkdtemp(prefix="v3_export_")
     input_path = os.path.join(tmp_dir, "model_v3.json")
+    
     # Create a unique temp file path for Blender to write into
-    fd, output_path = tempfile.mkstemp(suffix=".glb", dir=tmp_dir)
+    # If output_path is provided, we still use a temp one for blender (then move/read)
+    # or just use it directly? Original logic used temp file inside tmp_dir.
+    # Let's stick to original logic: write to temp, then read.
+    fd, temp_output_path = tempfile.mkstemp(suffix=".glb", dir=tmp_dir)
     os.close(fd)
+    
     try:
-        os.remove(output_path)  # Ensure Blender can create it fresh
+        os.remove(temp_output_path)
     except FileNotFoundError:
         pass
+        
     try:
         if isinstance(model_json, dict):
             with open(input_path, "w") as f:
@@ -492,10 +1081,14 @@ def export_glb(model_json: object) -> bytes:
         else:
             raise ValueError(f"Unsupported model_json type: {type(model_json)}")
 
-        written_path = _run_blender_export(input_path, output_path, "glb") or output_path
+        written_path = _run_blender_export(input_path, temp_output_path, "glb") or temp_output_path
+
+        # Post-process to remove crosstalk (still need sanitization per-pass)
+        _sanitize_gltf(written_path, model_json)
 
         with open(written_path, "rb") as f:
             data = f.read()
+            
         return data
     finally:
         if os.environ.get("KEEP_V3_GLTF_TMP") != "1":
@@ -503,6 +1096,54 @@ def export_glb(model_json: object) -> bytes:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
             except Exception:
                 pass
+
+
+def export_glb(model_json: object) -> bytes:
+    """
+    Orchestrates the export process.
+    If multiple animations are present, it performs a "Clean Room" Multi-Pass Export
+    and merges them at the GLTF level using pygltflib.
+    """
+    if isinstance(model_json, str):
+         try:
+             model_data = json.loads(model_json)
+         except:
+             # Fallback if valid JSON string but we need dict for logic
+             return _export_glb_single_pass(model_json)
+    else:
+        model_data = model_json
+        
+    animations = model_data.get('animations') or []
+    
+    # Case A: 0 or 1 Animation -> Single Pass
+    if len(animations) <= 1:
+        return _export_glb_single_pass(model_data)
+        
+    print(f"[Multi-Pass Export] Detected {len(animations)} animations. Using Clean Room Merge.")
+    
+    # Case B: Multi-Pass
+    # 1. Export Master (Geometry + Anim 0)
+    master_scope = json.loads(json.dumps(model_data))
+    master_scope['animations'] = [animations[0]] if animations else []
+    
+    print(f"[Pass 0] Exporting Master Base...")
+    master_bytes = _export_glb_single_pass(master_scope)
+    
+    # 2. Loop & Merge
+    for i in range(1, len(animations)):
+        anim = animations[i]
+        anim_name = anim.get('name', f'anim_{i}')
+        print(f"[Pass {i}] Exporting Isolated ({anim_name})...")
+        
+        pass_scope = json.loads(json.dumps(model_data))
+        pass_scope['animations'] = [anim]
+        
+        source_bytes = _export_glb_single_pass(pass_scope)
+        
+        print(f"  Merging {anim_name} into Master...")
+        master_bytes = _merge_gltf_single_animation(master_bytes, source_bytes)
+            
+    return master_bytes
 
 
 def export_gltf(model_json: object) -> str:

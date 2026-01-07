@@ -18,8 +18,9 @@ from collections import defaultdict, deque
 from pydantic import ValidationError
 
 # Import centralized rotation utilities and models
-from blocksmith.converters.rotation_utils import euler_to_quaternion
-from blocksmith.schema.blockjson import Entity, CuboidEntity, GroupEntity, MetaModel, ModelDefinition
+# Import centralized rotation utilities and models
+# from blocksmith.converters.rotation_utils import euler_to_quaternion # Moved to inner scope
+from blocksmith.schema.blockjson import Entity, CuboidEntity, GroupEntity, MetaModel, ModelDefinition, Animation, Channel
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,9 @@ class PythonExecutor:
     """Executes Python code safely and extracts entities."""
     
     def __init__(self):
+        # Local import to prevent circular dependency
+        from blocksmith.converters.rotation_utils import euler_to_quaternion
+
         self.safe_importer = SafeImporter()
         
         # Helper functions for entity creation
@@ -145,9 +149,84 @@ class PythonExecutor:
                 'scale': scale,
             }
         
+        def animation(name, duration, channels, loop_mode='repeat', **kwargs):
+            """Create an animation definition."""
+            return {
+                'name': name,
+                'duration': duration,
+                'channels': channels,
+                'loop_mode': loop_mode
+            }
+
+        def channel(target_id, property, frames, interpolation='linear', metadata=None, **kwargs):
+            """Create an animation channel."""
+            # Handle frames input: Dict[int, val] or List[Dict]
+            processed_frames = []
+            
+            if isinstance(frames, dict):
+                # Convert {0: val, 10: val} to [{'time': 0, 'value': val}, ...]
+                for t, v in frames.items():
+                    # Check for rotation conversion
+                    if property == 'rotation':
+                        # If value is length 3, assume Euler and convert to Quat
+                        if isinstance(v, (list, tuple)) and len(v) == 3:
+                            v = euler_to_quaternion(v)
+                    
+                    processed_frames.append({'time': int(t), 'value': v})
+            elif isinstance(frames, list):
+                # Handle list of tuples [(time, val), ...] OR list of dicts
+                for f in frames:
+                    time = 0
+                    val = None
+                    
+                    if isinstance(f, (list, tuple)) and len(f) == 2:
+                        # Tuple format
+                        time = f[0]
+                        val = f[1]
+                    elif isinstance(f, dict):
+                        # Dict format
+                        time = f.get('time')
+                        val = f.get('value')
+                    else:
+                         # Skip unknown formats for now or raise
+                         continue
+
+                    # Process Value (Euler -> Quat)
+                    if property == 'rotation':
+                        if isinstance(val, (list, tuple)) and len(val) == 3:
+                            val = euler_to_quaternion(val)
+                    
+                    # Store as integer ticks (assuming input is ticks for now as per schema, 
+                    # OR handle seconds conversion if we want to be fancy. 
+                    # The prompt says input is seconds, but internal schema is ticks.
+                    # Wait, prompt says: "Time: Float seconds". 
+                    # But the schema/importer usually expects ticks. 
+                    # The previous 'importer.py' handled TICKS_PER_SEC conversion.
+                    # This one from ANIMATION_CONTEXT seems to lack it?
+                    # Let's check 'TICKS_PER_SEC' in globals. Yes line 220.
+                    # So we should convert seconds -> ticks here!
+                    
+                    # Convert seconds to ticks
+                    TICKS_PER_SEC = self.safe_globals.get('TICKS_PER_SEC', 24)
+                    time_ticks = int(round(time * TICKS_PER_SEC))
+                    
+                    processed_frames.append({'time': time_ticks, 'value': val})
+            else:
+                raise ValueError("frames must be a dict {time: value} or list of dicts")
+
+            return {
+                'target_id': target_id, # matching schema
+                'property': property,
+                'frames': processed_frames,
+                'interpolation': interpolation,
+                'metadata': metadata
+            }
+
         # Store functions as instance variables so they can be referenced in safe_globals
         self.cuboid = cuboid
         self.group = group
+        self.animation = animation
+        self.channel = channel
         
         # Create safe execution environment
         self.safe_globals = {
@@ -166,7 +245,13 @@ class PythonExecutor:
             # Helper functions
             'cuboid': self.cuboid,
             'group': self.group,
+            'animation': self.animation,
+            'channel': self.channel,
+            # Schema shortcuts
+            'Animation': self.animation,
+            'Channel': self.channel,
             'UNIT': 1.0 / 16,
+            'TICKS_PER_SEC': 24,
             # Pre-imported common modules
             'math': math,
             'random': random,
@@ -215,6 +300,33 @@ class PythonExecutor:
             
         except Exception as e:
             logger.error(f"Error executing Python code: {e}")
+            logger.error("Traceback:", exc_info=True)
+    def execute_python_code_for_animations(self, code: str) -> List[Dict[str, Any]]:
+        """Execute Python code and extract animations."""
+        try:
+            local_namespace = {}
+            exec(code, self.safe_globals, local_namespace)
+            
+            # Look for animations
+            animations = None
+            
+            # Method 1: 'create_animations()' function
+            if 'create_animations' in local_namespace:
+                animations = local_namespace['create_animations']()
+            # Method 2: 'animations' variable
+            elif 'animations' in local_namespace:
+                animations = local_namespace['animations']
+
+            if animations is None:
+                raise ValueError("No animations found. Code should define 'create_animations()' or 'animations'")
+                
+            if not isinstance(animations, list):
+                raise ValueError(f"Animations return value must be a list, got {type(animations)}")
+                
+            return animations
+            
+        except Exception as e:
+            logger.error(f"Error executing Animation Python code: {e}")
             logger.error("Traceback:", exc_info=True)
             raise
 
@@ -321,3 +433,31 @@ def import_python_from_file(
         raise Exception("Error generating v3 schema from Python code")
 
     return model_json
+def import_animation_only(python_code: str) -> List[Dict[str, Any]]:
+    """
+    Import Python code containing only animation definitions.
+    Returns list of Animation dictionaries (schema-ready).
+    """
+    try:
+        executor = PythonExecutor()
+        anim_dicts = executor.execute_python_code_for_animations(python_code)
+        
+        valid_anims = []
+        for ad in anim_dicts:
+            # Validate against schema
+            # But wait, channels are nested dicts. 
+            # Channel(**dict) handles nested? No, Channel frames are List[Dict], helper produced that.
+            # Channel(target_id=..., property=..., frames=[...])
+            # Animation(channels=[Channel(...)])
+            # The helper returns dicts, not Pydantic objects.
+            # So we need to convert nested channel dicts to Channel objects?
+            # Or just let Pydantic model_validate handle the nested dict structure?
+            # Pydantic handles nested dicts fine!
+            
+            anim = Animation.model_validate(ad)
+            valid_anims.append(anim.model_dump(exclude_none=False))
+            
+        return valid_anims
+    except Exception as e:
+        logger.error(f"Error importing animation code: {e}")
+        raise
