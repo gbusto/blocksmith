@@ -47,7 +47,7 @@ You have access to the following helper functions and classes:
 13. **Loop Mode Values**: The `loop_mode` argument in `Animation()` **MUST** be one of: `'once'`, `'repeat'`, or `'pingpong'`. Do **NOT** use `'loop'`, `'cycle'`, or defaults.
 14. **Shared Language & Coordinate System**:
     - **World Up**: +Y Axis. (Gravity pulls down along -Y).
-    - **Forward**: +Z Axis. (Characters face +Z).
+    - **Forward**: -Z Axis. (Characters face -Z).
     - **Right**: +X Axis.
     - **Pivot Points**: All rotations occur around the object's `pivot` defined in the Entity DSL. A "Center" rotation means rotating around this pivot.
     - **"Reset"**: Returning to the values defined in the Entity DSL (Bind Pose).
