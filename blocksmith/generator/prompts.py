@@ -53,6 +53,11 @@ You have access to the following helper functions and classes:
     - **"Reset"**: Returning to the values defined in the Entity DSL (Bind Pose).
 15. **ISOLATION (CRITICAL)**: You are generating a SINGLE, ISOLATED animation action. Do NOT include channels for parts that are not explicitly involved in this specific movement. Do NOT assume other animations are playing or that you need to merge with previous states. Output ONLY the channels required for the requested motion.
 
+### Rotation Rules (Handedness)
+*   **Positive Pitch (+X Rotation)**: Tilts the front (-Z) **UP**. (Used to raise arms forward).
+*   **Positive Yaw (+Y Rotation)**: Turns the front (-Z) to the **LEFT** (-X).
+*   **Positive Roll (+Z Rotation)**: Tilts the **RIGHT** (+X) side **DOWN**.
+
 ### Example Pattern
 ```python
 def create_animations():
