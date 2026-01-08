@@ -267,6 +267,10 @@ blocksmith link -m model.py -a walk.py -a run.py -a jump.py -o final.glb
 
 ### ⚠️ Animation Caveats & Best Practices
 
+> **Note (Beta):** The Animation system currently exports to **GLB/GLTF only** (not BBModel). To add animations to a model, you must link them during the generation process using the source files (`.py`/`.json`). You cannot yet "append" an animation to an existing compiled GLB file.
+>
+> **Pro Tip:** Since animations are just Python code, you can manually tweak keyframes in `walk.py` or paste the code into an LLM to request changes (e.g. "make the bounce 2x higher").
+
 1.  **Centered Pivots:** If you want an object to rotate around its center (like a floating cube), the **Model** must have a Group pivot at its geometric center.
     *   *Bad:* A cube at `[0,0,0]` will rotate around the bottom-left corner.
     *   *Good:* A cube inside a Group at `[0, 0.5, 0]` will rotate around its center.
