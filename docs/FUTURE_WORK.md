@@ -59,9 +59,11 @@ Build a "Smart Retargeter" in `pygltflib` or `blocksmith link`:
     *   GLTF stores baked samples. BBModel stores explicit keyframes (but in Euler).
     *   Both need to be normalized to the BlockSmith v3 Animation Schema within the importer.
 3.  **Program Synthesis (Optional/Hard):**
+    *   **Is the DSL ready?** Yes. The DSL strictly expects a list of keyframe dicts (`frames=[...]`). It does not verify *how* that list was created.
+    *   **The Trade-off:** "Baked DSL" (a hardcoded list of 100 values) is valid code, but harder for humans to edit than the original procedural code (`for i in range(10): ...`).
     *   **Pragmatic Approach:** Generate "Baked DSL" code:
         ```python
-        # Generated from import
+        # Generated from import (Baked Keyframes)
         frames = [
             {'time': 0, 'value': [0,0,0]},
             {'time': 1, 'value': [0,0.1,0]},
@@ -69,3 +71,14 @@ Build a "Smart Retargeter" in `pygltflib` or `blocksmith link`:
         ]
         ```
     *   This allows the user to copy-paste this list into an LLM context and say "Simplify this curve" or "Make it faster".
+
+### 4. Schema Evolution (The "Lossless" Requirement)
+*   **Current Constraint:** The v3 Schema enforces `time` as **Integers (Ticks)**.
+*   **The Problem:** Importing a GLTF with arbitrary timing (e.g., `0.1234s`) into a 24fps tick system results in quantization errors (snapping to grid).
+*   **Future Requirement:** To support a truly lossless roundtrip for any external file, we would need to:
+    1.  **Update Schema:** Update `blocksmith/schema/blockjson.py` to allow `time` to be `float` (seconds) or `int`.
+    2.  **Update Converters:**
+        *   `importer.py` (GLTF & BBModel): Need to assign float times instead of rounding.
+        *   `exporter.py` (GLTF & BBModel): Need to read float times and write them out without tick conversion.
+    3.  **Update Prompt:** Update `blocksmith/animator/SYSTEM_PROMPT.md` to teach the LLM how to handle floating-point timing if exposed.
+    *This is only strictly necessary if we aim for pixel-perfect preservation of external animation data.*
