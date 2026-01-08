@@ -586,6 +586,6 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ---
 
-**Made with ❤️ by Gabriel Busto**
+**Originally created for Hytopia with ❤️ by [Gabriel Busto](https://github.com/gbusto)**
 
 Generate anything you can imagine, one block at a time.
