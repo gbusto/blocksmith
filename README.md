@@ -121,7 +121,43 @@ BlockSmith uses **Gemini 2.5 Pro** by default (best quality for block models).
 
 If you need help with this, let me know. OR, just use OpenAI, or even a free and local model if you want. If you run into a lot of issues with 429/rate limit errors, it's worth adding your billing info to get more use out of Gemini.
 
-**Set the environment variable:**
+**Configure your API key:**
+
+#### Option 1: direnv (Recommended)
+
+direnv automatically loads environment variables when you `cd` into the project:
+
+```bash
+# Install direnv
+# macOS
+brew install direnv
+
+# Linux (Ubuntu/Debian)
+sudo apt install direnv
+
+# Then add to your shell (~/.bashrc, ~/.zshrc, etc.)
+eval "$(direnv hook bash)"  # or zsh, fish, etc.
+```
+
+**Setup (automatic):**
+```bash
+cd blocksmith
+direnv allow  # Creates .env from template automatically
+```
+
+Then edit `.env` with your API key:
+```bash
+GEMINI_API_KEY=your-actual-key-here
+```
+
+That's it! Your keys are now:
+- ✅ Project-scoped (only loaded in this directory)
+- ✅ Auto-loaded when you `cd` into the repo
+- ✅ Never accidentally committed (`.env` is gitignored)
+
+#### Option 2: Shell RC file (Global)
+
+Add to your shell configuration file:
 
 ```bash
 # macOS/Linux - Add to ~/.bashrc or ~/.zshrc
@@ -142,7 +178,7 @@ set GEMINI_API_KEY=your-key-here
 echo $GEMINI_API_KEY  # Should print your key
 ```
 
-### 3. Install Blender (Optional)
+### 3. Install Blender (Optional, for GLB/GLTF only)
 
 **Skip this if you only need BBModel, JSON, or Python DSL formats!**
 
@@ -432,6 +468,19 @@ bs.generate("a tower").save("tower.glb")
 **Problem:** `Exception: No GEMINI_API_KEY found`
 
 **Solution:**
+
+**If using direnv:**
+1. Make sure you ran `direnv allow` in the project directory
+2. Check that `.env` exists and contains your key:
+   ```bash
+   cat .env  # Should show GEMINI_API_KEY=your-key
+   ```
+3. Verify it's loaded:
+   ```bash
+   echo $GEMINI_API_KEY  # Should print your key
+   ```
+
+**If using shell RC file:**
 1. Make sure you set the environment variable:
    ```bash
    export GEMINI_API_KEY="your-key-here"
